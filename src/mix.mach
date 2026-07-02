@@ -1,0 +1,52 @@
+# audio.mix: sample-level mixing primitives.
+#
+# the pure-mach mixing layer works in normalized f32 samples, nominally in
+# [-1.0, 1.0]. these are the foundational per-sample operations the mixer and
+# effect graph compose; nothing here touches the device layer.
+
+# unity: the identity gain factor (0 dBFS, no attenuation).
+pub val unity: f32 = 1.0;
+
+# silence: a zero-amplitude sample.
+pub val silence: f32 = 0.0;
+
+# gain: scale a sample by a linear gain factor.
+# ---
+# sample: input sample
+# factor: linear gain (unity leaves the sample unchanged)
+# ret:    the scaled sample
+pub fun gain(sample: f32, factor: f32) f32 {
+    ret sample * factor;
+}
+
+# sum: add two samples onto one bus.
+# ---
+# a:   first sample
+# b:   second sample
+# ret: the summed sample, unclamped
+pub fun sum(a: f32, b: f32) f32 {
+    ret a + b;
+}
+
+# clamp: hard-limit a sample to the normalized [-1.0, 1.0] range.
+#
+# the master bus applies this last so summed signal cannot exceed full scale.
+# ---
+# sample: input sample
+# ret:    the sample clamped to [-1.0, 1.0]
+pub fun clamp(sample: f32) f32 {
+    if (sample > 1.0) { ret 1.0; }
+    if (sample < -1.0) { ret -1.0; }
+    ret sample;
+}
+
+test "mix: gain, sum, and clamp" {
+    if (gain(0.5, 2.0) != 1.0) { ret 1; }
+    if (gain(0.5, unity) != 0.5) { ret 1; }
+    if (sum(0.25, 0.5) != 0.75) { ret 1; }
+    if (sum(silence, 0.3) != 0.3) { ret 1; }
+    if (clamp(1.5) != 1.0) { ret 1; }
+    if (clamp(-1.5) != -1.0) { ret 1; }
+    if (clamp(0.5) != 0.5) { ret 1; }
+    ret 0;
+}

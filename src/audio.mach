@@ -1,0 +1,16 @@
+# audio.audio: the flat public surface of the mach-audio library.
+#
+# re-exports every public symbol of the split modules under one namespace so a
+# bare `use audio;` reaches the whole API as audio.gain(), audio.sum(),
+# audio.clamp(). the split modules (audio.mix, ...) remain importable on their
+# own for smaller dependency surfaces.
+
+use audio.mix;
+# links the startup entrypoint so `mach test` over this library produces a binary.
+use std.runtime;
+
+fwd mix.unity;
+fwd mix.silence;
+fwd mix.gain;
+fwd mix.sum;
+fwd mix.clamp;
