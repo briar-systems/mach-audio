@@ -1,8 +1,13 @@
-# audio.mix: sample-level mixing primitives.
+# audio.mix: sample- and buffer-level mixing primitives.
 #
 # the pure-mach mixing layer works in normalized f32 samples, nominally in
-# [-1.0, 1.0]. these are the foundational per-sample operations the mixer and
-# effect graph compose; nothing here touches the device layer.
+# [-1.0, 1.0]. the per-sample operations are the foundation; the buffer-level
+# operations apply them across an interleaved f32 sample array (a Buffer's
+# storage). nothing here touches the device layer.
+
+use std.types.size.usize;
+
+use mem: std.memory;
 
 # unity: the identity gain factor (0 dBFS, no attenuation).
 pub val unity: f32 = 1.0;
@@ -40,6 +45,118 @@ pub fun clamp(sample: f32) f32 {
     ret sample;
 }
 
+# Source: one input to a mixdown — a sample bus and its linear gain.
+# ---
+# samples: interleaved f32 samples, at least as long as the mix length
+# gain:    linear gain applied to this source
+pub rec Source {
+    samples: *f32;
+    gain:    f32;
+}
+
+# apply_gain: scale n interleaved samples in place by a linear gain factor.
+# ---
+# samples: interleaved sample array
+# n:       number of samples to scale
+# factor:  linear gain
+pub fun apply_gain(samples: *f32, n: usize, factor: f32) {
+    if (samples == nil) { ret; }
+    var i: usize = 0;
+    for (i < n) {
+        samples[i] = samples[i] * factor;
+        i          = i + 1;
+    }
+}
+
+# clamp_samples: hard-limit n interleaved samples in place to [-1.0, 1.0].
+# ---
+# samples: interleaved sample array
+# n:       number of samples to clamp
+pub fun clamp_samples(samples: *f32, n: usize) {
+    if (samples == nil) { ret; }
+    var i: usize = 0;
+    for (i < n) {
+        samples[i] = clamp(samples[i]);
+        i          = i + 1;
+    }
+}
+
+# mix_add: accumulate a gain-scaled source onto a destination bus.
+#
+# computes dst[i] = dst[i] + src[i] * gain for i in [0, n); does not clamp.
+# ---
+# dst:  destination bus, n samples, added onto in place
+# src:  source samples, n samples
+# n:    number of samples to accumulate
+# gain: linear gain applied to src
+pub fun mix_add(dst: *f32, src: *f32, n: usize, gain: f32) {
+    if (dst == nil || src == nil) { ret; }
+    var i: usize = 0;
+    for (i < n) {
+        dst[i] = dst[i] + src[i] * gain;
+        i      = i + 1;
+    }
+}
+
+# mix: sum count gain-scaled sources into dst, then saturating-clamp.
+#
+# dst is overwritten, not accumulated onto: it is zeroed, every source is added
+# with its gain, and the bus is clamped to [-1.0, 1.0]. all sources and dst
+# share one interleaved layout and are at least n samples long.
+# ---
+# dst:     destination bus, n samples, overwritten
+# n:       number of interleaved samples to mix
+# sources: pointer to count Source records
+# count:   number of sources
+pub fun mix(dst: *f32, n: usize, sources: *Source, count: usize) {
+    if (dst == nil) { ret; }
+    mem.zero[f32](dst, n);
+    if (sources != nil) {
+        var s: usize = 0;
+        for (s < count) {
+            mix_add(dst, sources[s].samples, n, sources[s].gain);
+            s = s + 1;
+        }
+    }
+    clamp_samples(dst, n);
+}
+
+# mono_to_stereo: expand frames mono samples to interleaved stereo.
+#
+# each mono sample is copied to both output channels. dst holds 2 * frames
+# samples; src holds frames samples; the two must not overlap.
+# ---
+# dst:    destination, 2 * frames interleaved stereo samples
+# src:    source, frames mono samples
+# frames: number of frames to convert
+pub fun mono_to_stereo(dst: *f32, src: *f32, frames: usize) {
+    if (dst == nil || src == nil) { ret; }
+    var i: usize = 0;
+    for (i < frames) {
+        val s: f32 = src[i];
+        dst[i * 2]     = s;
+        dst[i * 2 + 1] = s;
+        i              = i + 1;
+    }
+}
+
+# stereo_to_mono: downmix interleaved stereo to mono by averaging channels.
+#
+# each output sample is (left + right) * 0.5. dst holds frames samples; src
+# holds 2 * frames interleaved stereo samples; the two must not overlap.
+# ---
+# dst:    destination, frames mono samples
+# src:    source, 2 * frames interleaved stereo samples
+# frames: number of frames to convert
+pub fun stereo_to_mono(dst: *f32, src: *f32, frames: usize) {
+    if (dst == nil || src == nil) { ret; }
+    var i: usize = 0;
+    for (i < frames) {
+        dst[i] = (src[i * 2] + src[i * 2 + 1]) * 0.5;
+        i      = i + 1;
+    }
+}
+
 test "mix: gain, sum, and clamp" {
     if (gain(0.5, 2.0) != 1.0) { ret 1; }
     if (gain(0.5, unity) != 0.5) { ret 1; }
@@ -48,5 +165,98 @@ test "mix: gain, sum, and clamp" {
     if (clamp(1.5) != 1.0) { ret 1; }
     if (clamp(-1.5) != -1.0) { ret 1; }
     if (clamp(0.5) != 0.5) { ret 1; }
+    ret 0;
+}
+
+test "mix: apply_gain scales a sample array in place" {
+    var buf: [4]f32 = [4]f32{0.1, 0.25, 0.5, -0.5};
+    apply_gain(?buf[0], 4, 2.0);
+    if (buf[0] != 0.2) { ret 1; }
+    if (buf[1] != 0.5) { ret 1; }
+    if (buf[2] != 1.0) { ret 1; }
+    if (buf[3] != -1.0) { ret 1; }
+    ret 0;
+}
+
+test "mix: clamp_samples limits an array to full scale" {
+    var buf: [4]f32 = [4]f32{1.5, -1.5, 0.5, -0.25};
+    clamp_samples(?buf[0], 4);
+    if (buf[0] != 1.0) { ret 1; }
+    if (buf[1] != -1.0) { ret 1; }
+    if (buf[2] != 0.5) { ret 1; }
+    if (buf[3] != -0.25) { ret 1; }
+    ret 0;
+}
+
+test "mix: mix_add accumulates a scaled source" {
+    var dst: [3]f32 = [3]f32{0.1, 0.2, 0.3};
+    var src: [3]f32 = [3]f32{0.5, 0.5, 0.5};
+    mix_add(?dst[0], ?src[0], 3, 0.5);
+    if (dst[0] != 0.35) { ret 1; }
+    if (dst[1] != 0.45) { ret 1; }
+    if (dst[2] != 0.55) { ret 1; }
+    ret 0;
+}
+
+test "mix: mix sums sources with gain and clamps the bus" {
+    var a: [4]f32 = [4]f32{0.5, 0.5, 0.5, -0.5};
+    var b: [4]f32 = [4]f32{0.5, 0.25, 1.0, -0.75};
+
+    var srcs: [2]Source;
+    srcs[0].samples = ?a[0];
+    srcs[0].gain    = 1.0;
+    srcs[1].samples = ?b[0];
+    srcs[1].gain    = 1.0;
+
+    var dst: [4]f32 = [4]f32{9.0, 9.0, 9.0, 9.0};
+    mix(?dst[0], 4, ?srcs[0], 2);
+
+    # 0.5+0.5=1.0; 0.5+0.25=0.75; 0.5+1.0=1.5 -> 1.0; -0.5-0.75=-1.25 -> -1.0
+    if (dst[0] != 1.0) { ret 1; }
+    if (dst[1] != 0.75) { ret 1; }
+    if (dst[2] != 1.0) { ret 1; }
+    if (dst[3] != -1.0) { ret 1; }
+    ret 0;
+}
+
+test "mix: mix with a per-source gain attenuates" {
+    var a: [2]f32 = [2]f32{1.0, -1.0};
+    var srcs: [1]Source;
+    srcs[0].samples = ?a[0];
+    srcs[0].gain    = 0.25;
+
+    var dst: [2]f32 = [2]f32{0.0, 0.0};
+    mix(?dst[0], 2, ?srcs[0], 1);
+    if (dst[0] != 0.25) { ret 1; }
+    if (dst[1] != -0.25) { ret 1; }
+    ret 0;
+}
+
+test "mix: mix with no sources yields silence" {
+    var dst: [3]f32 = [3]f32{0.4, -0.4, 0.9};
+    mix(?dst[0], 3, nil, 0);
+    if (dst[0] != 0.0) { ret 1; }
+    if (dst[1] != 0.0) { ret 1; }
+    if (dst[2] != 0.0) { ret 1; }
+    ret 0;
+}
+
+test "mix: mono_to_stereo duplicates each sample" {
+    var src: [3]f32 = [3]f32{0.1, -0.2, 0.3};
+    var dst: [6]f32;
+    mono_to_stereo(?dst[0], ?src[0], 3);
+    if (dst[0] != 0.1 || dst[1] != 0.1) { ret 1; }
+    if (dst[2] != -0.2 || dst[3] != -0.2) { ret 1; }
+    if (dst[4] != 0.3 || dst[5] != 0.3) { ret 1; }
+    ret 0;
+}
+
+test "mix: stereo_to_mono averages channels" {
+    var src: [6]f32 = [6]f32{1.0, 0.0, -0.5, 0.5, 0.2, 0.2};
+    var dst: [3]f32;
+    stereo_to_mono(?dst[0], ?src[0], 3);
+    if (dst[0] != 0.5) { ret 1; }
+    if (dst[1] != 0.0) { ret 1; }
+    if (dst[2] != 0.2) { ret 1; }
     ret 0;
 }
