@@ -25,10 +25,14 @@ ref = "branch/main"
 
 ## Status
 
-Early. The current surface is the pure-mach sample primitives in `audio.mix`
-(`gain`, `sum`, `clamp`) with display-free tests. The native device layer,
-WAV decoder, resampler, and effect graph described below are the roadmap, not
-yet implemented. The device layer deliberately links nothing today.
+Early, but the pure-mach layer has taken shape. Implemented with display-free
+tests: the interleaved-`f32` buffer/format currency (`audio.buffer`), a
+RIFF/WAVE decoder for PCM 16/24/32-bit and IEEE float32 in mono and stereo
+(`audio.wav`), the mixer core — per-source-gain mixdown with a saturating
+clamp plus mono↔stereo conversion (`audio.mix`) — and a linear-interpolation
+resampler (`audio.resample`). The native device layer and the effect graph
+described below remain the roadmap. The device layer deliberately links nothing
+today.
 
 ## Design
 
