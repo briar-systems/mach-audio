@@ -37,7 +37,7 @@ pub fun resample_frame_count(src_frames: usize, src_rate: u32, dst_rate: u32) us
 # dst_rate:   output sample rate
 pub fun resample_linear(dst: *f32, dst_frames: usize, src: *f32, src_frames: usize, channels: u16, src_rate: u32, dst_rate: u32) {
     if (dst == nil || src == nil) { ret; }
-    if (channels == 0 || src_frames == 0 || dst_rate == 0) { ret; }
+    if (channels == 0 || src_frames == 0 || src_rate == 0 || dst_rate == 0) { ret; }
 
     val ch:   usize = channels::usize;
     val step: f64   = src_rate::f64 / dst_rate::f64;
@@ -121,6 +121,15 @@ test "resample: stereo interpolates channels independently" {
 test "resample: zero source frames is a noop" {
     var dst: [2]f32 = [2]f32{0.7, -0.7};
     resample_linear(?dst[0], 2, nil, 0, 1, 44100, 48000);
+    if (dst[0] != 0.7) { ret 1; }
+    if (dst[1] != -0.7) { ret 1; }
+    ret 0;
+}
+
+test "resample: zero source rate is a noop" {
+    var src: [2]f32 = [2]f32{0.2, 0.4};
+    var dst: [2]f32 = [2]f32{0.7, -0.7};
+    resample_linear(?dst[0], 2, ?src[0], 2, 1, 0, 48000);
     if (dst[0] != 0.7) { ret 1; }
     if (dst[1] != -0.7) { ret 1; }
     ret 0;
