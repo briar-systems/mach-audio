@@ -1,9 +1,9 @@
-# audio.buffer: the pcm currency of the pure-mach layer.
+# the pcm currency of the pure-mach layer
 #
 # the pure layer works in interleaved, normalized f32 samples nominally in
 # [-1.0, 1.0]. a Format describes how a flat sample stream is laid out (rate and
 # channel count); a Buffer owns one such stream. the future device layer hands
-# this type up and takes it back — nothing here touches the device.
+# this type up and takes it back, nothing here touches the device.
 
 use std.types.result.Result;
 use std.types.result.ok;
@@ -20,7 +20,7 @@ use std.types.string.str;
 use allo: std.allocator;
 use page: std.allocator.page;
 
-# Format: the interpretation of an interleaved f32 sample stream.
+# the interpretation of an interleaved f32 sample stream
 # ---
 # sample_rate: frames per second (e.g. 44100)
 # channels:    interleaved channel count (1 = mono, 2 = stereo)
@@ -29,7 +29,7 @@ pub rec Format {
     channels:    u16;
 }
 
-# Buffer: an owning, interleaved f32 sample buffer.
+# an owning, interleaved f32 sample buffer
 #
 # samples holds frames * channels values in channel-interleaved order; release
 # it with dnit.
@@ -45,7 +45,7 @@ pub rec Buffer {
     samples: *f32;
 }
 
-# init: allocate a zeroed Buffer of the given frame count.
+# allocate a zeroed Buffer of the given frame count
 # ---
 # a:      allocator to back the sample storage
 # format: rate and channel layout; channels must be >= 1
@@ -78,7 +78,7 @@ pub fun init(a: *allo.Allocator, format: Format, frames: usize) Result[Buffer, s
     ret ok[Buffer, str](buf);
 }
 
-# dnit: free the sample storage and reset the buffer to empty.
+# free the sample storage and reset the buffer to empty
 # ---
 # ret: true if the backing memory was released
 pub fun dnit(buf: *Buffer) bool {
@@ -94,7 +94,7 @@ pub fun dnit(buf: *Buffer) bool {
     ret freed;
 }
 
-# sample_count: total interleaved samples in the buffer (frames * channels).
+# total interleaved samples in the buffer (frames * channels)
 # ---
 # buf: buffer to query
 # ret: number of f32 samples in buf.samples
@@ -102,7 +102,7 @@ pub fun sample_count(buf: Buffer) usize {
     ret buf.frames * (buf.format.channels::usize);
 }
 
-# at: pointer to the sample for a given frame and channel, bounds-checked.
+# pointer to the sample for a given frame and channel, bounds-checked
 # ---
 # buf:     buffer to index
 # frame:   frame index (0 .. frames-1)

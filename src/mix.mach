@@ -1,4 +1,4 @@
-# audio.mix: sample- and buffer-level mixing primitives.
+# sample- and buffer-level mixing primitives
 #
 # the pure-mach mixing layer works in normalized f32 samples, nominally in
 # [-1.0, 1.0]. the per-sample operations are the foundation; the buffer-level
@@ -9,13 +9,13 @@ use std.types.size.usize;
 
 use mem: std.memory;
 
-# unity: the identity gain factor (0 dBFS, no attenuation).
+# the identity gain factor (0 dBFS, no attenuation)
 pub val unity: f32 = 1.0;
 
-# silence: a zero-amplitude sample.
+# a zero-amplitude sample
 pub val silence: f32 = 0.0;
 
-# gain: scale a sample by a linear gain factor.
+# scale a sample by a linear gain factor
 # ---
 # sample: input sample
 # factor: linear gain (unity leaves the sample unchanged)
@@ -24,7 +24,7 @@ pub fun gain(sample: f32, factor: f32) f32 {
     ret sample * factor;
 }
 
-# sum: add two samples onto one bus.
+# add two samples onto one bus
 # ---
 # a:   first sample
 # b:   second sample
@@ -33,7 +33,7 @@ pub fun sum(a: f32, b: f32) f32 {
     ret a + b;
 }
 
-# clamp: hard-limit a sample to the normalized [-1.0, 1.0] range.
+# hard-limit a sample to the normalized [-1.0, 1.0] range
 #
 # the master bus applies this last so summed signal cannot exceed full scale.
 # ---
@@ -45,7 +45,7 @@ pub fun clamp(sample: f32) f32 {
     ret sample;
 }
 
-# Source: one input to a mixdown — a sample bus and its linear gain.
+# one input to a mixdown, a sample bus and its linear gain
 # ---
 # samples: interleaved f32 samples, at least as long as the mix length
 # gain:    linear gain applied to this source
@@ -54,7 +54,7 @@ pub rec Source {
     gain:    f32;
 }
 
-# apply_gain: scale n interleaved samples in place by a linear gain factor.
+# scale n interleaved samples in place by a linear gain factor
 # ---
 # samples: interleaved sample array
 # n:       number of samples to scale
@@ -68,7 +68,7 @@ pub fun apply_gain(samples: *f32, n: usize, factor: f32) {
     }
 }
 
-# clamp_samples: hard-limit n interleaved samples in place to [-1.0, 1.0].
+# hard-limit n interleaved samples in place to [-1.0, 1.0]
 # ---
 # samples: interleaved sample array
 # n:       number of samples to clamp
@@ -81,7 +81,7 @@ pub fun clamp_samples(samples: *f32, n: usize) {
     }
 }
 
-# mix_add: accumulate a gain-scaled source onto a destination bus.
+# accumulate a gain-scaled source onto a destination bus
 #
 # computes dst[i] = dst[i] + src[i] * gain for i in [0, n); does not clamp.
 # ---
@@ -98,7 +98,7 @@ pub fun mix_add(dst: *f32, src: *f32, n: usize, gain: f32) {
     }
 }
 
-# mix: sum count gain-scaled sources into dst, then saturating-clamp.
+# sum count gain-scaled sources into dst, then saturating-clamp
 #
 # dst is overwritten, not accumulated onto: it is zeroed, every source is added
 # with its gain, and the bus is clamped to [-1.0, 1.0]. all sources and dst
@@ -121,7 +121,7 @@ pub fun mix(dst: *f32, n: usize, sources: *Source, count: usize) {
     clamp_samples(dst, n);
 }
 
-# mono_to_stereo: expand frames mono samples to interleaved stereo.
+# expand frames mono samples to interleaved stereo
 #
 # each mono sample is copied to both output channels. dst holds 2 * frames
 # samples; src holds frames samples; the two must not overlap.
@@ -140,7 +140,7 @@ pub fun mono_to_stereo(dst: *f32, src: *f32, frames: usize) {
     }
 }
 
-# stereo_to_mono: downmix interleaved stereo to mono by averaging channels.
+# downmix interleaved stereo to mono by averaging channels
 #
 # each output sample is (left + right) * 0.5. dst holds frames samples; src
 # holds 2 * frames interleaved stereo samples; the two must not overlap.

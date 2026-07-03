@@ -1,4 +1,4 @@
-# audio.wav: a RIFF/WAVE decoder producing the library's f32 buffers.
+# a RIFF/WAVE decoder producing the library's f32 buffers
 #
 # walks RIFF chunks (tolerating unknown ones), parses the fmt chunk, and
 # converts the data chunk to interleaved, normalized f32 in a Buffer. supports
@@ -18,21 +18,21 @@ use std.types.bool.false;
 use std.types.size.usize;
 use std.types.string.str;
 
-use allo: std.allocator;
-use page: std.allocator.page;
+use allo:   std.allocator;
+use page:   std.allocator.page;
 use buffer: audio.buffer;
 
-# audio format tags carried in the fmt chunk.
+# audio format tags carried in the fmt chunk
 val FORMAT_PCM:        u32 = 1;
 val FORMAT_IEEE_FLOAT: u32 = 3;
 val FORMAT_EXTENSIBLE: u32 = 0xFFFE;
 
-# rd_u16: read a little-endian u16 at off, widened to u32. off+2 must be in bounds.
+# read a little-endian u16 at off, widened to u32. off+2 must be in bounds
 fun rd_u16(p: *u8, off: usize) u32 {
     ret (p[off]::u32) | ((p[off + 1]::u32) << 8);
 }
 
-# rd_u32: read a little-endian u32 at off. off+4 must be in bounds.
+# read a little-endian u32 at off. off+4 must be in bounds
 fun rd_u32(p: *u8, off: usize) u32 {
     ret (p[off]::u32)
       | ((p[off + 1]::u32) << 8)
@@ -40,19 +40,19 @@ fun rd_u32(p: *u8, off: usize) u32 {
       | ((p[off + 3]::u32) << 24);
 }
 
-# tag_eq: test whether the four bytes at off equal the given ascii tag.
+# test whether the four bytes at off equal the given ascii tag
 fun tag_eq(p: *u8, off: usize, a: u8, b: u8, c: u8, d: u8) bool {
     ret p[off] == a && p[off + 1] == b && p[off + 2] == c && p[off + 3] == d;
 }
 
-# s16_to_f32: normalize a little-endian 16-bit PCM sample to [-1.0, 1.0).
+# normalize a little-endian 16-bit PCM sample to [-1.0, 1.0)
 fun s16_to_f32(p: *u8, off: usize) f32 {
     var s: i32 = rd_u16(p, off)::i32;
     if (s >= 32768) { s = s - 65536; }
     ret s::f32 / 32768.0;
 }
 
-# s24_to_f32: normalize a little-endian 24-bit PCM sample to [-1.0, 1.0).
+# normalize a little-endian 24-bit PCM sample to [-1.0, 1.0)
 fun s24_to_f32(p: *u8, off: usize) f32 {
     val u: u32 = (p[off]::u32) | ((p[off + 1]::u32) << 8) | ((p[off + 2]::u32) << 16);
     var s: i32 = u::i32;
@@ -60,18 +60,18 @@ fun s24_to_f32(p: *u8, off: usize) f32 {
     ret s::f32 / 8388608.0;
 }
 
-# s32_to_f32: normalize a little-endian 32-bit PCM sample to [-1.0, 1.0).
+# normalize a little-endian 32-bit PCM sample to [-1.0, 1.0)
 fun s32_to_f32(p: *u8, off: usize) f32 {
     val s: i32 = rd_u32(p, off):~i32;
     ret s::f32 / 2147483648.0;
 }
 
-# f32_to_f32: read a little-endian IEEE float32 sample as-is.
+# read a little-endian IEEE float32 sample as-is
 fun f32_to_f32(p: *u8, off: usize) f32 {
     ret rd_u32(p, off):~f32;
 }
 
-# decode: decode a RIFF/WAVE byte stream into an interleaved f32 Buffer.
+# decode a RIFF/WAVE byte stream into an interleaved f32 Buffer
 #
 # supports PCM 16/24/32-bit and IEEE float32, mono and stereo. unknown chunks
 # are skipped; a trailing partial frame in the data chunk is ignored. returns an
@@ -181,14 +181,14 @@ pub fun decode(a: *allo.Allocator, data: *u8, len: usize) Result[buffer.Buffer, 
     ret ok[buffer.Buffer, str](buf);
 }
 
-# le16: write a little-endian u16 to a byte buffer at off; returns off+2. test fixture.
+# write a little-endian u16 to a byte buffer at off; returns off+2. test fixture
 fun le16(b: *u8, off: usize, v: u32) usize {
     b[off]     = (v & 0xFF)::u8;
     b[off + 1] = ((v >> 8) & 0xFF)::u8;
     ret off + 2;
 }
 
-# le32: write a little-endian u32 to a byte buffer at off; returns off+4. test fixture.
+# write a little-endian u32 to a byte buffer at off; returns off+4. test fixture
 fun le32(b: *u8, off: usize, v: u32) usize {
     b[off]     = (v & 0xFF)::u8;
     b[off + 1] = ((v >> 8) & 0xFF)::u8;
@@ -197,7 +197,7 @@ fun le32(b: *u8, off: usize, v: u32) usize {
     ret off + 4;
 }
 
-# tag4: write a four-byte ascii tag at off; returns off+4. test fixture.
+# write a four-byte ascii tag at off; returns off+4. test fixture
 fun tag4(b: *u8, off: usize, a: u8, c: u8, d: u8, e: u8) usize {
     b[off]     = a;
     b[off + 1] = c;
@@ -206,8 +206,8 @@ fun tag4(b: *u8, off: usize, a: u8, c: u8, d: u8, e: u8) usize {
     ret off + 4;
 }
 
-# write_header: lay down a canonical RIFF/fmt header for a data chunk of
-# data_bytes, returning the offset at the start of sample bytes. test fixture.
+# lay down a canonical RIFF/fmt header for a data chunk of
+# data_bytes, returning the offset at the start of sample bytes. test fixture
 fun write_header(b: *u8, format: u32, channels: u32, sample_rate: u32, bits: u32, data_bytes: u32) usize {
     val block_align: u32 = channels * (bits / 8);
     val byte_rate:   u32 = sample_rate * block_align;
