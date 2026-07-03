@@ -1,4 +1,4 @@
-# audio.audio: the flat public surface of the mach-audio library.
+# the flat public surface of the mach-audio library
 #
 # re-exports every public symbol of the split modules under one namespace so a
 # bare `use audio;` reaches the whole API as audio.gain(), audio.sum(),

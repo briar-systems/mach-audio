@@ -1,4 +1,4 @@
-# audio.resample: linear-interpolation sample-rate conversion.
+# linear-interpolation sample-rate conversion
 #
 # converts interleaved f32 material between two sample rates by linearly
 # interpolating each channel independently. linear interpolation is cheap and
@@ -7,7 +7,7 @@
 
 use std.types.size.usize;
 
-# resample_frame_count: output frame count for a rate conversion.
+# output frame count for a rate conversion
 #
 # computes floor(src_frames * dst_rate / src_rate); the exact size a
 # resample_linear destination must hold. returns 0 if either rate is 0.
@@ -21,7 +21,7 @@ pub fun resample_frame_count(src_frames: usize, src_rate: u32, dst_rate: u32) us
     ret (src_frames * (dst_rate::usize)) / (src_rate::usize);
 }
 
-# resample_linear: linearly resample interleaved f32 frames between rates.
+# linearly resample interleaved f32 frames between rates
 #
 # writes dst_frames output frames, each channel interpolated independently from
 # the two nearest source frames. dst must hold dst_frames * channels samples
