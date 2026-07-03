@@ -1,0 +1,191 @@
+# audio.buffer: the pcm currency of the pure-mach layer.
+#
+# the pure layer works in interleaved, normalized f32 samples nominally in
+# [-1.0, 1.0]. a Format describes how a flat sample stream is laid out (rate and
+# channel count); a Buffer owns one such stream. the future device layer hands
+# this type up and takes it back — nothing here touches the device.
+
+use std.types.result.Result;
+use std.types.result.ok;
+use std.types.result.err;
+use std.types.result.is_ok;
+use std.types.result.is_err;
+use std.types.result.unwrap_ok;
+use std.types.result.unwrap_err;
+use std.types.bool.bool;
+use std.types.bool.true;
+use std.types.size.usize;
+use std.types.string.str;
+
+use allo: std.allocator;
+use page: std.allocator.page;
+
+# Format: the interpretation of an interleaved f32 sample stream.
+# ---
+# sample_rate: frames per second (e.g. 44100)
+# channels:    interleaved channel count (1 = mono, 2 = stereo)
+pub rec Format {
+    sample_rate: u32;
+    channels:    u16;
+}
+
+# Buffer: an owning, interleaved f32 sample buffer.
+#
+# samples holds frames * channels values in channel-interleaved order; release
+# it with dnit.
+# ---
+# alloc:   allocator backing samples
+# format:  rate and channel layout
+# frames:  number of frames (samples per channel)
+# samples: interleaved sample storage, owned (nil when frames is 0)
+pub rec Buffer {
+    alloc:   *allo.Allocator;
+    format:  Format;
+    frames:  usize;
+    samples: *f32;
+}
+
+# init: allocate a zeroed Buffer of the given frame count.
+# ---
+# a:      allocator to back the sample storage
+# format: rate and channel layout; channels must be >= 1
+# frames: number of frames to allocate
+# ret:    a zeroed Buffer, or an error on invalid format, overflow, or OOM
+pub fun init(a: *allo.Allocator, format: Format, frames: usize) Result[Buffer, str] {
+    if (format.channels == 0) {
+        ret err[Buffer, str]("format requires at least one channel");
+    }
+
+    val ch: usize = format.channels::usize;
+    if (frames > (~(0::usize)) / ch) {
+        ret err[Buffer, str]("sample count overflow");
+    }
+    val total: usize = frames * ch;
+
+    val res: Result[*f32, str] = allo.zallocate[f32](a, total);
+    if (is_err[*f32, str](res)) {
+        ret err[Buffer, str](unwrap_err[*f32, str](res));
+    }
+
+    var buf: Buffer;
+    buf.alloc   = a;
+    buf.format  = format;
+    buf.frames  = frames;
+    buf.samples = unwrap_ok[*f32, str](res);
+    ret ok[Buffer, str](buf);
+}
+
+# dnit: free the sample storage and reset the buffer to empty.
+# ---
+# ret: true if the backing memory was released
+pub fun dnit(buf: *Buffer) bool {
+    if (buf == nil) { ret true; }
+
+    val ch:    usize = buf.format.channels::usize;
+    val total: usize = buf.frames * ch;
+
+    val freed: bool = is_ok[bool, str](allo.deallocate[f32](buf.alloc, buf.samples, total));
+    if (freed) {
+        buf.samples = nil;
+        buf.frames  = 0;
+    }
+    ret freed;
+}
+
+# sample_count: total interleaved samples in the buffer (frames * channels).
+# ---
+# buf: buffer to query
+# ret: number of f32 samples in buf.samples
+pub fun sample_count(buf: Buffer) usize {
+    ret buf.frames * (buf.format.channels::usize);
+}
+
+# at: pointer to the sample for a given frame and channel, bounds-checked.
+# ---
+# buf:     buffer to index
+# frame:   frame index (0 .. frames-1)
+# channel: channel index (0 .. channels-1)
+# ret:     pointer to the sample, or an error if either index is out of range
+pub fun at(buf: *Buffer, frame: usize, channel: usize) Result[*f32, str] {
+    if (buf == nil) { ret err[*f32, str]("buffer is nil"); }
+    val ch: usize = buf.format.channels::usize;
+    if (frame >= buf.frames || channel >= ch) {
+        ret err[*f32, str]("sample index out of bounds");
+    }
+    ret ok[*f32, str](?buf.samples[frame * ch + channel]);
+}
+
+test "buffer: init allocates zeroed interleaved storage" {
+    var a: allo.Allocator;
+    page.make(?a);
+
+    var fmt: Format;
+    fmt.sample_rate = 48000;
+    fmt.channels    = 2;
+
+    val res: Result[Buffer, str] = init(?a, fmt, 4);
+    if (is_err[Buffer, str](res)) { ret 1; }
+    var buf: Buffer = unwrap_ok[Buffer, str](res);
+
+    if (buf.frames != 4) { ret 1; }
+    if (sample_count(buf) != 8) { ret 1; }
+    if (buf.format.sample_rate != 48000) { ret 1; }
+
+    var i: usize = 0;
+    for (i < 8) {
+        if (buf.samples[i] != 0.0) { ret 1; }
+        i = i + 1;
+    }
+
+    if (!dnit(?buf)) { ret 1; }
+    ret 0;
+}
+
+test "buffer: at bounds-checks frame and channel" {
+    var a: allo.Allocator;
+    page.make(?a);
+
+    var fmt: Format;
+    fmt.sample_rate = 44100;
+    fmt.channels    = 2;
+
+    var buf: Buffer = unwrap_ok[Buffer, str](init(?a, fmt, 3));
+
+    val ok0: Result[*f32, str] = at(?buf, 2, 1);
+    if (is_err[*f32, str](ok0)) { ret 1; }
+    @unwrap_ok[*f32, str](ok0) = 0.5;
+    if (buf.samples[2 * 2 + 1] != 0.5) { ret 1; }
+
+    if (is_ok[*f32, str](at(?buf, 3, 0))) { ret 1; }
+    if (is_ok[*f32, str](at(?buf, 0, 2))) { ret 1; }
+
+    if (!dnit(?buf)) { ret 1; }
+    ret 0;
+}
+
+test "buffer: zero channels is rejected" {
+    var a: allo.Allocator;
+    page.make(?a);
+
+    var fmt: Format;
+    fmt.sample_rate = 44100;
+    fmt.channels    = 0;
+
+    if (is_ok[Buffer, str](init(?a, fmt, 8))) { ret 1; }
+    ret 0;
+}
+
+test "buffer: zero frames allocates nothing and dnit is a noop" {
+    var a: allo.Allocator;
+    page.make(?a);
+
+    var fmt: Format;
+    fmt.sample_rate = 22050;
+    fmt.channels    = 1;
+
+    var buf: Buffer = unwrap_ok[Buffer, str](init(?a, fmt, 0));
+    if (sample_count(buf) != 0) { ret 1; }
+    if (buf.samples != nil) { ret 1; }
+    if (!dnit(?buf)) { ret 1; }
+    ret 0;
+}
