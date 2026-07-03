@@ -52,6 +52,9 @@ pub rec Buffer {
 # frames: number of frames to allocate
 # ret:    a zeroed Buffer, or an error on invalid format, overflow, or OOM
 pub fun init(a: *allo.Allocator, format: Format, frames: usize) Result[Buffer, str] {
+    if (a == nil) {
+        ret err[Buffer, str]("allocator is nil");
+    }
     if (format.channels == 0) {
         ret err[Buffer, str]("format requires at least one channel");
     }
@@ -81,8 +84,7 @@ pub fun init(a: *allo.Allocator, format: Format, frames: usize) Result[Buffer, s
 pub fun dnit(buf: *Buffer) bool {
     if (buf == nil) { ret true; }
 
-    val ch:    usize = buf.format.channels::usize;
-    val total: usize = buf.frames * ch;
+    val total: usize = sample_count(@buf);
 
     val freed: bool = is_ok[bool, str](allo.deallocate[f32](buf.alloc, buf.samples, total));
     if (freed) {
@@ -187,5 +189,15 @@ test "buffer: zero frames allocates nothing and dnit is a noop" {
     if (sample_count(buf) != 0) { ret 1; }
     if (buf.samples != nil) { ret 1; }
     if (!dnit(?buf)) { ret 1; }
+    ret 0;
+}
+
+test "buffer: nil allocator is rejected" {
+    var fmt: Format;
+    fmt.sample_rate = 44100;
+    fmt.channels    = 2;
+
+    val res: Result[Buffer, str] = init(nil, fmt, 4);
+    if (is_ok[Buffer, str](res)) { ret 1; }
     ret 0;
 }

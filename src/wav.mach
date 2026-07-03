@@ -12,7 +12,6 @@ use std.types.result.ok;
 use std.types.result.err;
 use std.types.result.is_err;
 use std.types.result.unwrap_ok;
-use std.types.result.unwrap_err;
 use std.types.bool.bool;
 use std.types.bool.true;
 use std.types.bool.false;
@@ -103,7 +102,9 @@ pub fun decode(a: *allo.Allocator, data: *u8, len: usize) Result[buffer.Buffer, 
         val size:   usize = rd_u32(data, off + 4)::usize;
         val body:   usize = off + 8;
 
-        if (body + size > len) {
+        # subtraction form (body <= len from the loop guard) avoids overflow on
+        # a hypothetical narrow-pointer target where size could approach usize.
+        if (size > len - body) {
             ret err[buffer.Buffer, str]("chunk extends past end of input");
         }
 
@@ -133,6 +134,7 @@ pub fun decode(a: *allo.Allocator, data: *u8, len: usize) Result[buffer.Buffer, 
     if (!have_fmt) { ret err[buffer.Buffer, str]("missing fmt chunk"); }
     if (!have_data) { ret err[buffer.Buffer, str]("missing data chunk"); }
     if (channels != 1 && channels != 2) { ret err[buffer.Buffer, str]("unsupported channel count"); }
+    if (sample_rate == 0) { ret err[buffer.Buffer, str]("sample rate is zero"); }
 
     val is_pcm:   bool = fmt_format == FORMAT_PCM;
     val is_float: bool = fmt_format == FORMAT_IEEE_FLOAT;
@@ -143,7 +145,8 @@ pub fun decode(a: *allo.Allocator, data: *u8, len: usize) Result[buffer.Buffer, 
     }
 
     val bytes_per_sample: usize = (bits::usize) / 8;
-    val frame_bytes:      usize = bytes_per_sample * (channels::usize);
+    val ch:               usize = channels::usize;
+    val frame_bytes:      usize = bytes_per_sample * ch;
     val frames:           usize = data_size / frame_bytes;
 
     var fmt: buffer.Format;
@@ -154,22 +157,22 @@ pub fun decode(a: *allo.Allocator, data: *u8, len: usize) Result[buffer.Buffer, 
     if (is_err[buffer.Buffer, str](bres)) { ret bres; }
     var buf: buffer.Buffer = unwrap_ok[buffer.Buffer, str](bres);
 
+    # pick the per-sample decoder once; the default covers 16-bit PCM.
+    var convert: fun(*u8, usize) f32 = s16_to_f32;
+    if (is_float) {
+        convert = f32_to_f32;
+    } or (bits == 24) {
+        convert = s24_to_f32;
+    } or (bits == 32) {
+        convert = s32_to_f32;
+    }
+
     var f: usize = 0;
     for (f < frames) {
         var c: usize = 0;
-        for (c < channels::usize) {
+        for (c < ch) {
             val at: usize = data_off + f * frame_bytes + c * bytes_per_sample;
-            var sample: f32 = 0.0;
-            if (is_float) {
-                sample = f32_to_f32(data, at);
-            } or (bits == 16) {
-                sample = s16_to_f32(data, at);
-            } or (bits == 24) {
-                sample = s24_to_f32(data, at);
-            } or {
-                sample = s32_to_f32(data, at);
-            }
-            buf.samples[f * (channels::usize) + c] = sample;
+            buf.samples[f * ch + c] = convert(data, at);
             c = c + 1;
         }
         f = f + 1;
@@ -178,14 +181,14 @@ pub fun decode(a: *allo.Allocator, data: *u8, len: usize) Result[buffer.Buffer, 
     ret ok[buffer.Buffer, str](buf);
 }
 
-# le16: append a little-endian u16 to a fixed byte buffer at off; returns off+2.
+# le16: write a little-endian u16 to a byte buffer at off; returns off+2. test fixture.
 fun le16(b: *u8, off: usize, v: u32) usize {
     b[off]     = (v & 0xFF)::u8;
     b[off + 1] = ((v >> 8) & 0xFF)::u8;
     ret off + 2;
 }
 
-# le32: append a little-endian u32 to a fixed byte buffer at off; returns off+4.
+# le32: write a little-endian u32 to a byte buffer at off; returns off+4. test fixture.
 fun le32(b: *u8, off: usize, v: u32) usize {
     b[off]     = (v & 0xFF)::u8;
     b[off + 1] = ((v >> 8) & 0xFF)::u8;
@@ -194,7 +197,7 @@ fun le32(b: *u8, off: usize, v: u32) usize {
     ret off + 4;
 }
 
-# tag4: write a four-byte ascii tag at off; returns off+4.
+# tag4: write a four-byte ascii tag at off; returns off+4. test fixture.
 fun tag4(b: *u8, off: usize, a: u8, c: u8, d: u8, e: u8) usize {
     b[off]     = a;
     b[off + 1] = c;
@@ -204,8 +207,7 @@ fun tag4(b: *u8, off: usize, a: u8, c: u8, d: u8, e: u8) usize {
 }
 
 # write_header: lay down a canonical RIFF/fmt header for a data chunk of
-# data_bytes, returning the offset just past the "data" size field (the start of
-# sample bytes). the buffer must hold at least 44 bytes.
+# data_bytes, returning the offset at the start of sample bytes. test fixture.
 fun write_header(b: *u8, format: u32, channels: u32, sample_rate: u32, bits: u32, data_bytes: u32) usize {
     val block_align: u32 = channels * (bits / 8);
     val byte_rate:   u32 = sample_rate * block_align;
@@ -432,6 +434,22 @@ test "wav: truncated data chunk is rejected" {
     o = le16(?b[0], o, 0);
 
     val res: Result[buffer.Buffer, str] = decode(?a, ?b[0], o);
+    if (is_err[buffer.Buffer, str](res)) { ret 0; }
+    ret 1;
+}
+
+test "wav: zero sample rate is rejected" {
+    var a: allo.Allocator;
+    page.make(?a);
+
+    var b: [52]u8;
+    var o: usize = write_header(?b[0], FORMAT_PCM, 2, 0, 16, 8);
+    o = le16(?b[0], o, 0);
+    o = le16(?b[0], o, 0);
+    o = le16(?b[0], o, 0);
+    o = le16(?b[0], o, 0);
+
+    val res: Result[buffer.Buffer, str] = decode(?a, ?b[0], 52);
     if (is_err[buffer.Buffer, str](res)) { ret 0; }
     ret 1;
 }
