@@ -5,12 +5,35 @@
 # audio.clamp(). the split modules (audio.mix, ...) remain importable on their
 # own for smaller dependency surfaces.
 
-use audio.mix;
+use audio.buffer;
+# aliased so the flattened `mix` function does not collide with the module name.
+use mixer: audio.mix;
+use audio.resample;
+use audio.wav;
 # links the startup entrypoint so `mach test` over this library produces a binary.
 use std.runtime;
 
-fwd mix.unity;
-fwd mix.silence;
-fwd mix.gain;
-fwd mix.sum;
-fwd mix.clamp;
+fwd buffer.Format;
+fwd buffer.Buffer;
+fwd buffer.init;
+fwd buffer.dnit;
+fwd buffer.sample_count;
+fwd buffer.at;
+
+fwd mixer.unity;
+fwd mixer.silence;
+fwd mixer.gain;
+fwd mixer.sum;
+fwd mixer.clamp;
+fwd mixer.Source;
+fwd mixer.apply_gain;
+fwd mixer.clamp_samples;
+fwd mixer.mix_add;
+fwd mixer.mix;
+fwd mixer.mono_to_stereo;
+fwd mixer.stereo_to_mono;
+
+fwd resample.resample_frame_count;
+fwd resample.resample_linear;
+
+fwd wav.decode;
