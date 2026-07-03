@@ -1,0 +1,127 @@
+# audio.resample: linear-interpolation sample-rate conversion.
+#
+# converts interleaved f32 material between two sample rates by linearly
+# interpolating each channel independently. linear interpolation is cheap and
+# artifact-prone at large ratios; higher-quality (windowed-sinc / polyphase)
+# resampling is future work. nothing here touches the device layer.
+
+use std.types.size.usize;
+
+# resample_frame_count: output frame count for a rate conversion.
+#
+# computes floor(src_frames * dst_rate / src_rate); the exact size a
+# resample_linear destination must hold. returns 0 if either rate is 0.
+# ---
+# src_frames: number of input frames
+# src_rate:   input sample rate
+# dst_rate:   output sample rate
+# ret:        number of output frames
+pub fun resample_frame_count(src_frames: usize, src_rate: u32, dst_rate: u32) usize {
+    if (src_rate == 0 || dst_rate == 0) { ret 0; }
+    ret (src_frames * (dst_rate::usize)) / (src_rate::usize);
+}
+
+# resample_linear: linearly resample interleaved f32 frames between rates.
+#
+# writes dst_frames output frames, each channel interpolated independently from
+# the two nearest source frames. dst must hold dst_frames * channels samples
+# (see resample_frame_count); src holds src_frames * channels samples. dst and
+# src must not overlap. a no-op if channels or src_frames is 0.
+# ---
+# dst:        destination, dst_frames * channels interleaved samples
+# dst_frames: number of output frames to write
+# src:        source, src_frames * channels interleaved samples
+# src_frames: number of input frames
+# channels:   interleaved channel count shared by src and dst
+# src_rate:   input sample rate
+# dst_rate:   output sample rate
+pub fun resample_linear(dst: *f32, dst_frames: usize, src: *f32, src_frames: usize, channels: u16, src_rate: u32, dst_rate: u32) {
+    if (dst == nil || src == nil) { ret; }
+    if (channels == 0 || src_frames == 0 || dst_rate == 0) { ret; }
+
+    val ch:   usize = channels::usize;
+    val step: f64   = src_rate::f64 / dst_rate::f64;
+    val last: usize = src_frames - 1;
+
+    var o: usize = 0;
+    for (o < dst_frames) {
+        val pos: f64   = o::f64 * step;
+        var i0:  usize = pos::usize;
+        if (i0 > last) { i0 = last; }
+        var i1: usize = i0 + 1;
+        if (i1 > last) { i1 = last; }
+        val frac: f32 = (pos - i0::f64)::f32;
+
+        var c: usize = 0;
+        for (c < ch) {
+            val s0: f32 = src[i0 * ch + c];
+            val s1: f32 = src[i1 * ch + c];
+            dst[o * ch + c] = s0 + (s1 - s0) * frac;
+            c = c + 1;
+        }
+        o = o + 1;
+    }
+}
+
+test "resample: frame count floors the ratio" {
+    if (resample_frame_count(4, 1, 2) != 8) { ret 1; }
+    if (resample_frame_count(6, 2, 1) != 3) { ret 1; }
+    if (resample_frame_count(5, 3, 3) != 5) { ret 1; }
+    if (resample_frame_count(10, 0, 44100) != 0) { ret 1; }
+    if (resample_frame_count(10, 44100, 0) != 0) { ret 1; }
+    ret 0;
+}
+
+test "resample: upsample a mono ramp 2x is exact at halves" {
+    var src: [4]f32 = [4]f32{0.0, 1.0, 2.0, 3.0};
+    val n: usize = resample_frame_count(4, 1, 2);
+    if (n != 8) { ret 1; }
+    var dst: [8]f32;
+    resample_linear(?dst[0], n, ?src[0], 4, 1, 1, 2);
+
+    var expect: [8]f32 = [8]f32{0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.0};
+    var i: usize = 0;
+    for (i < 8) {
+        if (dst[i] != expect[i]) { ret 1; }
+        i = i + 1;
+    }
+    ret 0;
+}
+
+test "resample: downsample a mono ramp picks exact frames" {
+    var src: [6]f32 = [6]f32{0.0, 1.0, 2.0, 3.0, 4.0, 5.0};
+    val n: usize = resample_frame_count(6, 2, 1);
+    if (n != 3) { ret 1; }
+    var dst: [3]f32;
+    resample_linear(?dst[0], n, ?src[0], 6, 1, 2, 1);
+    if (dst[0] != 0.0) { ret 1; }
+    if (dst[1] != 2.0) { ret 1; }
+    if (dst[2] != 4.0) { ret 1; }
+    ret 0;
+}
+
+test "resample: stereo interpolates channels independently" {
+    # two frames: {L0=0, R0=1}, {L1=1, R1=0}
+    var src: [4]f32 = [4]f32{0.0, 1.0, 1.0, 0.0};
+    val n: usize = resample_frame_count(2, 1, 2);
+    if (n != 4) { ret 1; }
+    var dst: [8]f32;
+    resample_linear(?dst[0], n, ?src[0], 2, 2, 1, 2);
+
+    # frame0 {0,1}; frame0.5 {0.5,0.5}; frame1 {1,0}; frame1.5 clamps to {1,0}
+    var expect: [8]f32 = [8]f32{0.0, 1.0, 0.5, 0.5, 1.0, 0.0, 1.0, 0.0};
+    var i: usize = 0;
+    for (i < 8) {
+        if (dst[i] != expect[i]) { ret 1; }
+        i = i + 1;
+    }
+    ret 0;
+}
+
+test "resample: zero source frames is a noop" {
+    var dst: [2]f32 = [2]f32{0.7, -0.7};
+    resample_linear(?dst[0], 2, nil, 0, 1, 44100, 48000);
+    if (dst[0] != 0.7) { ret 1; }
+    if (dst[1] != -0.7) { ret 1; }
+    ret 0;
+}
