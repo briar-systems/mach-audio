@@ -10,6 +10,8 @@ use audio.buffer;
 use mixer: audio.mix;
 use audio.resample;
 use audio.wav;
+use audio.stream;
+use audio.device;
 # links the startup entrypoint so `mach test` over this library produces a binary.
 use std.runtime;
 
@@ -37,3 +39,17 @@ fwd resample.resample_frame_count;
 fwd resample.resample_linear;
 
 fwd wav.decode;
+
+fwd stream.Stream;
+fwd stream.stream_over;
+fwd stream.pull;
+fwd stream.done;
+
+fwd device.RenderFn;
+fwd device.Device;
+fwd device.open;
+fwd device.start;
+fwd device.stop;
+fwd device.close;
+fwd device.sample_rate;
+fwd device.channels;

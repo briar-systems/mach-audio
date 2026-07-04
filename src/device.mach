@@ -1,0 +1,144 @@
+# native f32 playback device over miniaudio's ma_device layer
+#
+# this is the only module that crosses into native code. it binds the vendored
+# miniaudio device shim (vendor/mad.c, miniaudio v0.11.25) and nothing else:
+# open a device, start/stop it, close it, and query the active format. the shim
+# exposes a small, ABI-stable `mad_*` surface, so miniaudio's own struct layouts
+# never reach Mach and a miniaudio bump cannot break this binding. everything
+# above the callback - mixing, decoding, resampling - is the pure-mach layer.
+#
+# REAL-TIME CONTRACT. the render callback runs on a separate, high-priority OS
+# thread owned by the audio backend. it must not allocate, take a lock, block,
+# or do I/O; it must only fill the output buffer and return promptly. missing a
+# deadline drops audio. filling from preallocated sources (audio.mix) or a
+# decoded Buffer (audio.stream) satisfies this; anything that can page-fault,
+# wait on a mutex, or call the allocator does not.
+#
+# LINKING. a program that opens a device links the compiled shim object and the
+# platform audio libraries. those requirements are declared in this project's
+# mach.toml (`[bin.play] libs` for the shim object, `[os.<name>] libs` for the
+# system libraries) and cascade to consumers; the pure-mach layer links nothing.
+
+use std.types.result.Result;
+use std.types.result.ok;
+use std.types.result.err;
+use std.types.bool.bool;
+use std.types.bool.true;
+use std.types.string.str;
+
+use buffer: audio.buffer;
+
+# a device render callback: fill out with frame_count interleaved f32 frames of
+# channels samples each, then return. invoked on the audio thread under the
+# real-time contract documented above.
+# ---
+# out:         interleaved f32 output, frame_count * channels samples, overwritten
+# frame_count: number of frames requested this call
+# channels:    interleaved channel count (matches the opened Format)
+# user:        the opaque pointer passed to open
+pub def RenderFn: fun(*f32, u32, u32, ptr);
+
+# open an f32 playback device; returns an opaque handle or nil on failure
+#[symbol("mad_device_open")]
+ext fun mad_device_open(sample_rate: u32, channels: u32, render: RenderFn, user: ptr) ptr;
+
+# start the device's audio thread; 0 on success
+#[symbol("mad_device_start")]
+ext fun mad_device_start(dev: ptr) i32;
+
+# stop the device's audio thread; 0 on success
+#[symbol("mad_device_stop")]
+ext fun mad_device_stop(dev: ptr) i32;
+
+# stop and release the device and its handle
+#[symbol("mad_device_close")]
+ext fun mad_device_close(dev: ptr);
+
+# the active sample rate the callback is fed
+#[symbol("mad_device_sample_rate")]
+ext fun mad_device_sample_rate(dev: ptr) u32;
+
+# the active channel count the callback is fed
+#[symbol("mad_device_channels")]
+ext fun mad_device_channels(dev: ptr) u32;
+
+# an open playback device driven by a render callback
+# ---
+# handle: opaque shim-owned device handle, nil once closed
+pub rec Device {
+    handle: ptr;
+}
+
+# open an f32 output device for the given format, driven by render
+#
+# the device starts stopped; call start to begin playback. the callback is fed
+# interleaved f32 at the active format, which may differ from the request when
+# the backend cannot honor it exactly - query sample_rate and channels after
+# opening and convert source material to match (audio.resample / audio.mix).
+# ---
+# format: requested rate and channel layout; channels must be >= 1
+# render: callback invoked on the audio thread to fill output (see RenderFn)
+# user:   opaque pointer handed back to every render call
+# ret:    an open Device, or an error if the format is invalid or the backend fails
+pub fun open(format: buffer.Format, render: RenderFn, user: ptr) Result[Device, str] {
+    if (format.channels == 0) { ret err[Device, str]("format requires at least one channel"); }
+    if (render == nil) { ret err[Device, str]("render callback is nil"); }
+
+    val h: ptr = mad_device_open(format.sample_rate, format.channels::u32, render, user);
+    if (h == nil) { ret err[Device, str]("failed to open audio device"); }
+
+    var d: Device;
+    d.handle = h;
+    ret ok[Device, str](d);
+}
+
+# start playback: the audio thread begins calling render
+# ---
+# dev: an open device
+# ret: true on success, or an error if the device is closed or the backend fails
+pub fun start(dev: *Device) Result[bool, str] {
+    if (dev == nil || dev.handle == nil) { ret err[bool, str]("device is not open"); }
+    if (mad_device_start(dev.handle) != 0) { ret err[bool, str]("failed to start audio device"); }
+    ret ok[bool, str](true);
+}
+
+# stop playback: render stops being called; the device stays open and restartable
+# ---
+# dev: an open device
+# ret: true on success, or an error if the device is closed or the backend fails
+pub fun stop(dev: *Device) Result[bool, str] {
+    if (dev == nil || dev.handle == nil) { ret err[bool, str]("device is not open"); }
+    if (mad_device_stop(dev.handle) != 0) { ret err[bool, str]("failed to stop audio device"); }
+    ret ok[bool, str](true);
+}
+
+# close the device and release its handle
+# ---
+# dev: a device to close; safe to call more than once (the handle is cleared)
+# ret: true once closed
+pub fun close(dev: *Device) bool {
+    if (dev == nil) { ret true; }
+    if (dev.handle != nil) {
+        mad_device_close(dev.handle);
+        dev.handle = nil;
+    }
+    ret true;
+}
+
+# the rate, in Hz, the device feeds the callback
+# ---
+# dev: an open device
+# ret: the active sample rate, or 0 if the device is closed
+pub fun sample_rate(dev: Device) u32 {
+    if (dev.handle == nil) { ret 0; }
+    ret mad_device_sample_rate(dev.handle);
+}
+
+# the channel count the device feeds the callback
+# ---
+# dev: an open device
+# ret: the active channel count, or 0 if the device is closed
+pub fun channels(dev: Device) u16 {
+    if (dev.handle == nil) { ret 0; }
+    ret mad_device_channels(dev.handle)::u16;
+}
