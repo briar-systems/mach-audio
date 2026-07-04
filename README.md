@@ -25,14 +25,18 @@ ref = "branch/main"
 
 ## Status
 
-Early, but the pure-mach layer has taken shape. Implemented with display-free
-tests: the interleaved-`f32` buffer/format currency (`audio.buffer`), a
-RIFF/WAVE decoder for PCM 16/24/32-bit and IEEE float32 in mono and stereo
-(`audio.wav`), the mixer core — per-source-gain mixdown with a saturating
-clamp plus mono↔stereo conversion (`audio.mix`) — and a linear-interpolation
-resampler (`audio.resample`). The native device layer and the effect graph
-described below remain the roadmap. The device layer deliberately links nothing
-today.
+The pure-mach layer and the native device layer are both in place, with
+display-free tests. The pure layer: the interleaved-`f32` buffer/format
+currency (`audio.buffer`), a RIFF/WAVE decoder for PCM 16/24/32-bit and IEEE
+float32 in mono and stereo (`audio.wav`), the mixer core, per-source-gain
+mixdown with a saturating clamp plus mono/stereo conversion (`audio.mix`), and
+a linear-interpolation resampler (`audio.resample`). The device layer: an f32
+playback device over miniaudio (`audio.device`) driven by a render callback,
+and a real-time-safe playback cursor (`audio.stream`) for streaming a decoded
+buffer to it. The effect graph described below remains the roadmap.
+
+Playback is verified end to end on Linux (ALSA / PulseAudio / PipeWire); the
+`play` example decodes a WAV, mixes it, and plays it. See [Playback](#playback).
 
 ## Design
 
@@ -41,11 +45,14 @@ mach-audio is two strictly-separated layers.
 ### Device layer — the only native code
 
 The device layer is the **sole** exception to the ecosystem's pure-Mach rule.
-It is [miniaudio](https://miniaud.io/), vendored as a single C translation
-unit and used **exclusively** at the `ma_device` level: device enumeration,
-the audio callback, and raw sample buffers in and out. miniaudio's own mixer,
-decoders, resampler, node graph, and high-level engine are explicitly **not**
-compiled in and **not** used.
+It is [miniaudio](https://miniaud.io/) (pinned to v0.11.25), vendored as a
+single C translation unit and used **exclusively** at the `ma_device` level:
+the device lifecycle (open, start, stop, close) and the audio callback, with
+raw f32 sample buffers going out. miniaudio's own mixer, decoders, resampler,
+node graph, and high-level engine are compiled out (`MA_NO_*`) and **not**
+used. A thin C shim (`vendor/mad.c`) exposes a small, ABI-stable `mad_*`
+surface over that lifecycle, so miniaudio's struct layouts never reach Mach and
+a miniaudio version bump cannot break the binding.
 
 The exception is deliberate. OS audio backends (WASAPI, CoreAudio, ALSA,
 PulseAudio, PipeWire) are a maintained-zoo problem — a moving target of
@@ -70,16 +77,55 @@ Everything above the device callback is pure Mach:
 The device layer hands this layer raw buffers and asks for raw buffers back;
 it knows nothing about formats, mixing, or effects.
 
+## Playback
+
+The device feeds a consumer-supplied render callback on a separate,
+high-priority OS thread. That callback fills interleaved f32 frames and returns:
+
+```mach
+use audio;
+
+# runs on the audio thread; pulls the next frames from a borrowed Stream.
+fun render(out: *f32, frames: u32, channels: u32, user: ptr) {
+    audio.pull(user:~*audio.Stream, out, frames, channels);
+}
+
+# ... on the main thread: decode -> mix -> open -> start
+val dev: audio.Device = /* audio.open(fmt, render, (?stream):~ptr) */ ...;
+```
+
+**Real-time contract.** The render callback runs on the audio thread and must
+not allocate, take a lock, block, or do I/O; it may only fill the buffer and
+return. Filling from preallocated sources (`audio.mix`) or a decoded buffer
+(`audio.stream`) satisfies this; anything that can page-fault or wait does not.
+The design is a plain callback hook (no ring buffer): the pure mixer already
+renders synchronously and allocation-free, so a buffer-and-producer-thread
+would only add latency.
+
+The full decode-to-speakers path lives in [`src/play.mach`](src/play.mach); run
+it with `make play WAV=some.wav`.
+
 ## Native dependency and linking
 
 The device layer follows [mach-glfw](https://github.com/briar-systems/mach-glfw)'s
-manifest pattern for native dependencies: once miniaudio is vendored, its
-per-OS backend libraries are declared in `mach.toml` under `[os.<name>]
-libs = [...]`, and the link requirement cascades to consumers through the
-manifest. Until then, the pure-Mach layer links nothing, mirroring
-[mach-gl](https://github.com/briar-systems/mach-gl).
+manifest pattern for native dependencies. miniaudio is vendored as one C
+translation unit (`vendor/mad.c`, which includes the pinned
+`vendor/miniaudio.h`) and compiled by the `Makefile` into a shared library,
+`libminiaudio.so`. `mach.toml` links it by name and declares the platform
+requirements under `[os.<name>] libs`, and those cascade to consumers through
+the manifest exactly as mach-glfw's GLFW dependency does.
 
-The backends miniaudio selects per platform:
+Because `mach` does not compile C, building anything that opens a device is two
+steps: `make lib` compiles the shim, then `mach build` links it (`make` wraps
+both, passing `-L build` so `mach` finds the shared library). A consumer
+inherits the platform libs automatically and builds the vendored shim the same
+way, putting its `libminiaudio.so` on the library path; `mach` cannot compile
+the C for them. The pure-Mach modules never call into the shim.
+
+miniaudio loads the OS backend at run time via `dlopen`, so the shim's own
+link-time requirement is just the C runtime, threads, math, and the dynamic
+loader, all carried inside `libminiaudio.so`. The backends it selects per
+platform:
 
 | OS | Backends |
 |---|---|
@@ -94,13 +140,14 @@ supports. The device layer's per-OS backends are validated as they land.
 
 | Target | ISA | Pure-Mach layer | Device layer |
 |---|---|---|---|
-| linux | x86_64 | yes | planned (ALSA / PulseAudio / PipeWire) |
-| windows | x86_64 | yes | planned (WASAPI) |
-| darwin | x86_64 | yes | planned (CoreAudio) |
+| linux | x86_64 | yes | yes (ALSA / PulseAudio / PipeWire) |
+| windows | x86_64 | yes | declared intent (WASAPI; needs a windows shim build) |
+| darwin | x86_64 | yes | declared intent (CoreAudio; needs framework linking) |
 
 ## Tests
 
 `test` blocks live beside the code they cover and are display-free: the sample
-primitives are exercised directly, with no device open and no audio hardware.
-Paths that need a live device — enumeration, the callback, real playback — are
-verified by running examples, not by `mach test`.
+primitives and the playback cursor are exercised directly, with no device open
+and no audio hardware, so the suite runs headless in CI. Paths that need a live
+device (the callback and real playback) are verified by running the `play`
+example, not by `mach test`.
