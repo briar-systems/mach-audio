@@ -29,9 +29,14 @@ jobs:
       - name: Sync dependencies
         run: mach dep pull
 
-      # the pure-mach layer links nothing: no device backend, no miniaudio.
+      # the device bindings compile into every artifact, so the test suite links
+      # the miniaudio shim. miniaudio dlopens the audio backends at run time and
+      # the tests open no device, so no audio dev packages are needed here.
+      - name: Compile miniaudio shim
+        run: make lib
+
       - name: Test
-        run: mach test .
+        run: make test
 
   build:
     name: Build
@@ -54,5 +59,11 @@ jobs:
       - name: Sync dependencies
         run: mach dep pull
 
+      # build-verify the device layer: the vendored miniaudio TU compiles and
+      # the example links against it and the declared platform libraries.
+      # audible playback needs an audio device and is verified off-CI.
       - name: Build
-        run: mach build .
+        run: |
+          set -euo pipefail
+          make build
+          test -x out/linux/bin/play || { echo "::error::make build produced no play binary"; exit 1; }

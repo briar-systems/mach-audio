@@ -1,0 +1,103 @@
+# decode a WAV file, mix it, and play it on the default output device
+#
+# the end-to-end path the library exists for: read bytes -> audio.decode (pure
+# WAV) -> audio.mix (pure mixer) -> audio.stream + audio.open (device). run it
+# with `make play WAV=path/to/file.wav` or `mach run . --bin play -- file.wav`.
+# needs a machine with an audio device; it cannot run in headless CI.
+#
+# the mixing is done once on the main thread into a device-format buffer, and
+# the audio thread only pulls from that finished buffer - so the render callback
+# never allocates or locks, honoring the real-time contract in audio.device.
+
+use std.runtime;
+use std.types.result.Result;
+use std.types.result.is_ok;
+use std.types.result.is_err;
+use std.types.result.unwrap_ok;
+use std.types.result.unwrap_err;
+use std.types.bool.bool;
+use std.types.bool.false;
+use std.types.size.usize;
+use std.types.string.str;
+
+use print: std.print;
+use allo:  std.allocator;
+use page:  std.allocator.page;
+use fs:    std.filesystem;
+use os:    std.system.os;
+use audio;
+
+# audio-thread render callback: pull the next frames from the borrowed Stream.
+# real-time safe - no allocation, no locks (audio.stream.pull guarantees it).
+fun render(out: *f32, frames: u32, channels: u32, user: ptr) {
+    audio.pull(user:~*audio.Stream, out, frames, channels);
+}
+
+#[symbol("main")]
+fun main(argc: i64, argv: **u8) i64 {
+    if (argc < 2) {
+        print.eprintln("usage: play <file.wav>");
+        ret 2;
+    }
+    val path: str = argv[1]::str;
+
+    var a: allo.Allocator;
+    page.make(?a);
+
+    val rf: Result[fs.Buffer, str] = fs.read_all_sized(?a, path);
+    if (is_err[fs.Buffer, str](rf)) {
+        print.eprintlnf("cannot read {}: {}", path, unwrap_err[fs.Buffer, str](rf));
+        ret 1;
+    }
+    val fb: fs.Buffer = unwrap_ok[fs.Buffer, str](rf);
+
+    val rd: Result[audio.Buffer, str] = audio.decode(?a, fb.data, fb.len);
+    if (is_err[audio.Buffer, str](rd)) {
+        print.eprintlnf("cannot decode {}: {}", path, unwrap_err[audio.Buffer, str](rd));
+        ret 1;
+    }
+    var src: audio.Buffer = unwrap_ok[audio.Buffer, str](rd);
+
+    # mix the decoded source into a device-format buffer (one source at unity
+    # gain; more sources plug in the same way).
+    val ro: Result[audio.Buffer, str] = audio.init(?a, src.format, src.frames);
+    if (is_err[audio.Buffer, str](ro)) {
+        print.eprintlnf("out of memory: {}", unwrap_err[audio.Buffer, str](ro));
+        ret 1;
+    }
+    var out: audio.Buffer = unwrap_ok[audio.Buffer, str](ro);
+
+    var sources: [1]audio.Source;
+    sources[0].samples = src.samples;
+    sources[0].gain    = audio.unity;
+    audio.mix(out.samples, audio.sample_count(out), ?sources[0], 1);
+
+    var s: audio.Stream = audio.stream_over(?out, false);
+
+    val rdev: Result[audio.Device, str] = audio.open(out.format, render, (?s):~ptr);
+    if (is_err[audio.Device, str](rdev)) {
+        print.eprintlnf("cannot open device: {}", unwrap_err[audio.Device, str](rdev));
+        ret 1;
+    }
+    var dev: audio.Device = unwrap_ok[audio.Device, str](rdev);
+
+    print.printlnf("playing {} ({} Hz, {} ch, {} frames)",
+        path, out.format.sample_rate, out.format.channels::u32, out.frames::u32);
+
+    val rstart: Result[bool, str] = audio.start(?dev);
+    if (is_err[bool, str](rstart)) {
+        print.eprintlnf("cannot start device: {}", unwrap_err[bool, str](rstart));
+        audio.close(?dev);
+        ret 1;
+    }
+
+    # play for the source duration plus a short tail so the device buffer drains.
+    val dur_ns: i64 = (out.frames::i64) * 1000000000 / (out.format.sample_rate::i64);
+    os.sleep(dur_ns + 300000000);
+
+    audio.stop(?dev);
+    audio.close(?dev);
+    audio.dnit(?out);
+    audio.dnit(?src);
+    ret 0;
+}

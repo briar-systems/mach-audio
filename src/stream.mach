@@ -1,0 +1,192 @@
+# a playback cursor that pulls frames from an already-decoded Buffer
+#
+# streams an interleaved f32 Buffer to a device render callback, advancing a
+# frame cursor and emitting silence past the end (or looping). the pull path
+# allocates nothing and takes no locks, so it is safe to drive directly from
+# the audio thread. it does no rate or channel conversion: the source Buffer
+# must already match the device format (convert with audio.resample / audio.mix
+# on the main thread first). nothing here touches the device layer.
+
+use std.types.size.usize;
+use std.types.bool.bool;
+use std.types.bool.true;
+use std.types.bool.false;
+use std.types.string.str;
+
+use R:    std.types.result;
+use allo: std.allocator;
+use page: std.allocator.page;
+use buffer: audio.buffer;
+
+# a cursor over a decoded, interleaved f32 source
+#
+# samples is borrowed, not owned: the backing Buffer must outlive the Stream
+# and the device driving it.
+# ---
+# samples:  interleaved f32 source samples, borrowed
+# frames:   total frames available in samples
+# channels: interleaved channel count of samples
+# cursor:   next frame to emit
+# looping:  restart at the end instead of emitting silence
+pub rec Stream {
+    samples:  *f32;
+    frames:   usize;
+    channels: u16;
+    cursor:   usize;
+    looping:  bool;
+}
+
+# build a Stream over a decoded Buffer, positioned at the first frame
+# ---
+# buf:     source buffer, borrowed for the Stream's lifetime
+# looping: whether to restart at the end instead of going silent
+# ret:     a Stream positioned at frame 0
+pub fun stream_over(buf: *buffer.Buffer, looping: bool) Stream {
+    var s: Stream;
+    s.samples  = buf.samples;
+    s.frames   = buf.frames;
+    s.channels = buf.format.channels;
+    s.cursor   = 0;
+    s.looping  = looping;
+    ret s;
+}
+
+# emit frame_count frames into out, advancing the cursor
+#
+# copies interleaved samples from the source into out (frame_count * channels
+# samples), wrapping to the start when looping or zero-filling the remainder at
+# end-of-stream. real-time safe: no allocation, no locks. out must hold
+# frame_count * channels samples. a channels mismatch with the source, or an
+# empty/absent source, yields silence.
+# ---
+# s:           the stream to pull from and advance
+# out:         interleaved f32 destination, frame_count * channels samples
+# frame_count: number of frames to emit
+# channels:    interleaved channel count of out (must match the source)
+pub fun pull(s: *Stream, out: *f32, frame_count: u32, channels: u32) {
+    if (out == nil) { ret; }
+    val fc: usize = frame_count::usize;
+    val ch: usize = channels::usize;
+
+    if (s == nil || s.samples == nil || s.frames == 0 || (s.channels::usize) != ch) {
+        var z: usize = 0;
+        for (z < fc * ch) { out[z] = 0.0; z = z + 1; }
+        ret;
+    }
+
+    var f: usize = 0;
+    for (f < fc) {
+        if (s.cursor >= s.frames) {
+            if (s.looping) {
+                s.cursor = 0;
+            } or {
+                var c0: usize = 0;
+                for (c0 < ch) { out[f * ch + c0] = 0.0; c0 = c0 + 1; }
+                f = f + 1;
+                cnt;
+            }
+        }
+        var c: usize = 0;
+        for (c < ch) {
+            out[f * ch + c] = s.samples[s.cursor * ch + c];
+            c = c + 1;
+        }
+        s.cursor = s.cursor + 1;
+        f        = f + 1;
+    }
+}
+
+# true once a non-looping stream has emitted its last source frame
+#
+# a looping stream is never done.
+# ---
+# s:   the stream to query
+# ret: true when the cursor has passed the last frame and looping is off
+pub fun done(s: Stream) bool {
+    if (s.looping) { ret false; }
+    ret s.cursor >= s.frames;
+}
+
+test "stream: pull copies frames and advances the cursor" {
+    var src: [8]f32 = [8]f32{0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8};
+    var s: Stream;
+    s.samples  = ?src[0];
+    s.frames   = 4;
+    s.channels = 2;
+    s.cursor   = 0;
+    s.looping  = false;
+
+    var out: [4]f32;
+    pull(?s, ?out[0], 2, 2);
+    if (out[0] != 0.1 || out[1] != 0.2 || out[2] != 0.3 || out[3] != 0.4) { ret 1; }
+    if (s.cursor != 2) { ret 1; }
+    if (done(s)) { ret 1; }
+    ret 0;
+}
+
+test "stream: pull zero-fills past the end when not looping" {
+    var src: [2]f32 = [2]f32{0.5, -0.5};
+    var s: Stream;
+    s.samples  = ?src[0];
+    s.frames   = 1;
+    s.channels = 2;
+    s.cursor   = 0;
+    s.looping  = false;
+
+    var out: [6]f32 = [6]f32{9.0, 9.0, 9.0, 9.0, 9.0, 9.0};
+    pull(?s, ?out[0], 3, 2);
+    if (out[0] != 0.5 || out[1] != -0.5) { ret 1; }
+    if (out[2] != 0.0 || out[3] != 0.0 || out[4] != 0.0 || out[5] != 0.0) { ret 1; }
+    if (!done(s)) { ret 1; }
+    ret 0;
+}
+
+test "stream: looping wraps to the start" {
+    var src: [2]f32 = [2]f32{1.0, 2.0};
+    var s: Stream;
+    s.samples  = ?src[0];
+    s.frames   = 2;
+    s.channels = 1;
+    s.cursor   = 0;
+    s.looping  = true;
+
+    var out: [5]f32;
+    pull(?s, ?out[0], 5, 1);
+    # 1,2 then wrap: 1,2,1
+    if (out[0] != 1.0 || out[1] != 2.0 || out[2] != 1.0 || out[3] != 2.0 || out[4] != 1.0) { ret 1; }
+    if (done(s)) { ret 1; }
+    ret 0;
+}
+
+test "stream: channel mismatch yields silence" {
+    var src: [4]f32 = [4]f32{0.3, 0.3, 0.3, 0.3};
+    var s: Stream;
+    s.samples  = ?src[0];
+    s.frames   = 4;
+    s.channels = 1;
+    s.cursor   = 0;
+    s.looping  = false;
+
+    var out: [4]f32 = [4]f32{9.0, 9.0, 9.0, 9.0};
+    pull(?s, ?out[0], 2, 2);
+    if (out[0] != 0.0 || out[1] != 0.0 || out[2] != 0.0 || out[3] != 0.0) { ret 1; }
+    ret 0;
+}
+
+test "stream: stream_over borrows the buffer at frame zero" {
+    var a: allo.Allocator;
+    page.make(?a);
+
+    var fmt: buffer.Format;
+    fmt.sample_rate = 48000;
+    fmt.channels    = 2;
+
+    var buf: buffer.Buffer = R.unwrap_ok[buffer.Buffer, str](buffer.init(?a, fmt, 3));
+    var s: Stream = stream_over(?buf, false);
+    if (s.samples != buf.samples) { ret 1; }
+    if (s.frames != 3 || s.channels != 2 || s.cursor != 0) { ret 1; }
+    if (s.looping) { ret 1; }
+
+    if (!buffer.dnit(?buf)) { ret 1; }
+    ret 0;
+}
