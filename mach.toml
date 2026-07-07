@@ -1,14 +1,12 @@
 [project]
-id      = "audio"
-version = "0.1.0"
-module  = "audio.mach"
-target  = "native"
-src     = "src"
-dep     = "dep"
-out     = "out/{target}/bin/{name}{ext}"
-obj     = "out/{target}/obj"
+id          = "audio"
+name        = "Mach Audio Library"
+description = "Mach audio playback and decoding library"
+version     = "0.2.0"
+src         = "src"
+out         = "out/{target.name}/{profile.name}"
 
-[target.linux]
+[target.linux-x86_64]
 isa = "x86_64"
 os  = "linux"
 abi = "sysv64"
@@ -17,42 +15,73 @@ abi = "sysv64"
 isa = "x86_64"
 os  = "windows"
 abi = "win64"
-ext = ".exe"
 
 [target.darwin]
 isa = "x86_64"
 os  = "darwin"
 abi = "sysv64"
 
-# the vendored miniaudio device shim, built by the Makefile into
-# libminiaudio.so and linked by name, cascaded to every consumer the way
-# mach-glfw declares its native GLFW dependency. the .so carries miniaudio's own
-# libc/pthread/dl/m dependencies and loads the actual backends (ALSA,
-# PulseAudio, JACK, PipeWire) at run time via dlopen, so nothing else is needed
-# at link time. builds must see it on the library path (`mach build . -L build`,
-# or install it); running needs it on the loader path.
-[os.linux]
-libs = ["miniaudio"]
+[profile.debug]
+opt = 0
 
-# WASAPI and the other Windows backends reach the audio APIs through COM. the
-# miniaudio shim itself (miniaudio.dll) is declared intent: cross-building it is
-# future work, so only the COM requirement is stated here.
-[os.windows]
-libs = ["ole32.dll"]
+[profile.release]
+opt = 2
 
-# CoreAudio playback needs the CoreAudio, AudioToolbox, and CoreFoundation
-# frameworks, plus a darwin build of the shim. `-framework` linking is not yet
-# expressible in mach.toml, so the darwin device layer is declared intent; the
-# pure-mach layer still builds for darwin.
-[os.darwin]
-libs = []
+[artifact.audio]
+kind    = "static"
+entry   = "audio.mach"
+out     = "lib/audio"
+targets = ["*"]
+link    = ["miniaudio-local", "pthread", "m", "dl", "rt", "ole32"]
 
-[lib.audio]
-entry = "audio.mach"
+[artifact.play]
+kind    = "bin"
+entry   = "play.mach"
+out     = "bin/play"
+targets = ["*"]
+link    = ["miniaudio-local", "pthread", "m", "dl", "rt", "ole32"]
 
-[bin.play]
-entry = "play.mach"
+[link.miniaudio-local]
+source = "local"
+path   = "{project.out}/obj/miniaudio/miniaudio.o"
+os     = ["linux"]
+export = true
 
-[deps.mach-std]
+[link.pthread]
+source = "system"
+name   = "pthread"
+os     = ["linux"]
+export = true
+
+[link.m]
+source = "system"
+name   = "m"
+os     = ["linux"]
+export = true
+
+[link.dl]
+source = "system"
+name   = "dl"
+os     = ["linux"]
+export = true
+
+[link.rt]
+source = "system"
+name   = "rt"
+os     = ["linux"]
+export = true
+
+[link.ole32]
+source = "system"
+name   = "ole32.dll"
+os     = ["windows"]
+export = true
+
+[step.build-miniaudio]
+cmd = "mkdir -p {project.out}/obj/miniaudio && cc -c -O2 -fPIC -w vendor/mad.c -o {project.out}/obj/miniaudio/miniaudio.o"
+in  = ["vendor/mad.c", "vendor/miniaudio.h"]
+out = ["{project.out}/obj/miniaudio/miniaudio.o"]
+
+[dep.mach-std]
 git = "https://github.com/briar-systems/mach-std"
 ref = "branch/main"
