@@ -18,7 +18,7 @@ fun master(a: f32, b: f32, trim: f32) f32 {
 Consuming projects vendor mach-audio as a normal Mach dependency:
 
 ```toml
-[deps.mach-audio]
+[dep.mach-audio]
 git = "https://github.com/briar-systems/mach-audio"
 ref = "branch/main"
 ```
@@ -103,29 +103,28 @@ renders synchronously and allocation-free, so a buffer-and-producer-thread
 would only add latency.
 
 The full decode-to-speakers path lives in [`src/play.mach`](src/play.mach); run
-it with `make play WAV=some.wav`.
+it with `mach run . --bin play -- some.wav`.
 
 ## Native dependency and linking
 
-The device layer follows [mach-glfw](https://github.com/briar-systems/mach-glfw)'s
-manifest pattern for native dependencies. miniaudio is vendored as one C
-translation unit (`vendor/mad.c`, which includes the pinned
-`vendor/miniaudio.h`) and compiled by the `Makefile` into a shared library,
-`libminiaudio.so`. `mach.toml` links it by name and declares the platform
-requirements under `[os.<name>] libs`, and those cascade to consumers through
-the manifest exactly as mach-glfw's GLFW dependency does.
+The device layer follows the ecosystem's native-dependency pattern. miniaudio is
+vendored as one C translation unit (`vendor/mad.c`, which includes the pinned
+`vendor/miniaudio.h`). `mach` does not compile C, so `mach.toml` declares a
+`[step.build-miniaudio]` that compiles the translation unit to an in-tree object
+and a `[link.miniaudio-local]` entry that links that object into every artifact,
+alongside the platform requirements declared as `[link.<name>]` system entries.
+Both the step and the link inputs cascade to consumers through the manifest.
 
-Because `mach` does not compile C, building anything that opens a device is two
-steps: `make lib` compiles the shim, then `mach build` links it (`make` wraps
-both, passing `-L build` so `mach` finds the shared library). A consumer
-inherits the platform libs automatically and builds the vendored shim the same
-way, putting its `libminiaudio.so` on the library path; `mach` cannot compile
-the C for them. The pure-Mach modules never call into the shim.
+Because the step lives in the manifest, `mach build` (and `mach test` / `mach
+run`) compiles the vendored translation unit and links it in one pass — there is
+no separate shim build and no `-L` flag. A consumer that pulls mach-audio
+inherits the step and the platform libs automatically and builds the vendored
+object the same way; `mach` cannot compile the C for them. The pure-Mach modules
+never call into the shim.
 
-miniaudio loads the OS backend at run time via `dlopen`, so the shim's own
+miniaudio loads the OS backend at run time via `dlopen`, so the object's own
 link-time requirement is just the C runtime, threads, math, and the dynamic
-loader, all carried inside `libminiaudio.so`. The backends it selects per
-platform:
+loader. The backends it selects per platform:
 
 | OS | Backends |
 |---|---|
