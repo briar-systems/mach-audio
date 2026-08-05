@@ -3,69 +3,251 @@ name: CI
 on:
   pull_request:
     branches: [dev, main]
+  workflow_dispatch:
 
 permissions:
   contents: read
 
+env:
+  MACH_REF: 2b8bb485afa22c6303227f5594d75bf75ee027dd
+  ZIG_VERSION: "0.16.0"
+
 jobs:
-  test:
-    name: Test Suite
+  linux:
+    name: Linux native
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - name: Fetch released mach
+      - name: Build current Mach
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          mkdir -p /tmp/machdl
+          mkdir -p "$RUNNER_TEMP/mach-release" "$RUNNER_TEMP/bin"
           gh release download -R briar-systems/mach \
-            -p 'mach-*-x86_64-linux.tar.gz' -D /tmp/machdl --clobber
-          tar -xzf /tmp/machdl/mach-*-x86_64-linux.tar.gz -C /tmp/machdl
-          install -m 0755 /tmp/machdl/mach /usr/local/bin/mach
-          mach info
+            -p 'mach-*-x86_64-linux.tar.gz' -D "$RUNNER_TEMP/mach-release" --clobber
+          tar -xzf "$RUNNER_TEMP"/mach-release/mach-*-x86_64-linux.tar.gz \
+            -C "$RUNNER_TEMP/mach-release"
+          install -m 0755 "$RUNNER_TEMP/mach-release/mach" "$RUNNER_TEMP/bootstrap-mach"
+          git init "$RUNNER_TEMP/mach-src"
+          git -C "$RUNNER_TEMP/mach-src" remote add origin https://github.com/briar-systems/mach.git
+          git -C "$RUNNER_TEMP/mach-src" fetch --depth 1 origin "$MACH_REF"
+          git -C "$RUNNER_TEMP/mach-src" checkout --detach FETCH_HEAD
+          cd "$RUNNER_TEMP/mach-src"
+          "$RUNNER_TEMP/bootstrap-mach" dep pull
+          "$RUNNER_TEMP/bootstrap-mach" build . --profile release -o current-mach
+          install -m 0755 current-mach "$RUNNER_TEMP/bin/mach"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
 
-      - name: Sync dependencies
-        run: mach dep pull
+      - name: Build and test native shim
+        run: |
+          set -euo pipefail
+          mach dep pull
+          for profile in debug release; do
+            mach build . --target linux-x86_64 --profile "$profile"
+            mach test . --target linux-x86_64 --profile "$profile"
+          done
 
-      # the device bindings compile into every artifact; mach runs the vendored
-      # miniaudio [step.build-miniaudio] and links its object automatically. the
-      # tests open no device (miniaudio dlopens backends at run time), so no audio
-      # dev packages are needed here.
-      - name: Test
-        run: mach test .
+      - name: Verify external consumer
+        run: |
+          set -euo pipefail
+          cd test/consumer
+          mach dep pull
+          for profile in debug release; do
+            mach build . --target linux-x86_64 --profile "$profile"
+            exe="out/linux-x86_64/$profile/bin/audio-consumer"
+            "$exe" | tee "$RUNNER_TEMP/audio-consumer-$profile.log"
+            grep -q '^consumer smoke ok$' "$RUNNER_TEMP/audio-consumer-$profile.log"
+            if ldd "$exe" | grep -qiE 'miniaudio|mach-audio'; then
+              echo "::error::$exe retains a dynamic mach-audio dependency"
+              exit 1
+            fi
+          done
 
-  build:
-    name: Build
+  windows:
+    name: Windows cross-link
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - name: Fetch released mach
+      - name: Install LLVM and Zig
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y llvm xz-utils
+          curl -fsSL "https://ziglang.org/download/$ZIG_VERSION/zig-x86_64-linux-$ZIG_VERSION.tar.xz" \
+            | tar -xJ -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/zig-x86_64-linux-$ZIG_VERSION" >> "$GITHUB_PATH"
+
+      - name: Build current Mach
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          mkdir -p /tmp/machdl
+          mkdir -p "$RUNNER_TEMP/mach-release" "$RUNNER_TEMP/bin"
           gh release download -R briar-systems/mach \
-            -p 'mach-*-x86_64-linux.tar.gz' -D /tmp/machdl --clobber
-          tar -xzf /tmp/machdl/mach-*-x86_64-linux.tar.gz -C /tmp/machdl
-          install -m 0755 /tmp/machdl/mach /usr/local/bin/mach
-          mach info
+            -p 'mach-*-x86_64-linux.tar.gz' -D "$RUNNER_TEMP/mach-release" --clobber
+          tar -xzf "$RUNNER_TEMP"/mach-release/mach-*-x86_64-linux.tar.gz \
+            -C "$RUNNER_TEMP/mach-release"
+          install -m 0755 "$RUNNER_TEMP/mach-release/mach" "$RUNNER_TEMP/bootstrap-mach"
+          git init "$RUNNER_TEMP/mach-src"
+          git -C "$RUNNER_TEMP/mach-src" remote add origin https://github.com/briar-systems/mach.git
+          git -C "$RUNNER_TEMP/mach-src" fetch --depth 1 origin "$MACH_REF"
+          git -C "$RUNNER_TEMP/mach-src" checkout --detach FETCH_HEAD
+          cd "$RUNNER_TEMP/mach-src"
+          "$RUNNER_TEMP/bootstrap-mach" dep pull
+          "$RUNNER_TEMP/bootstrap-mach" build . --profile release -o current-mach
+          install -m 0755 current-mach "$RUNNER_TEMP/bin/mach"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
 
-      - name: Sync dependencies
-        run: mach dep pull
-
-      # build-verify the device layer: mach runs the vendored miniaudio
-      # [step.build-miniaudio], compiles the pure-Mach audio artifact, and links
-      # the play example against the step's object and the declared platform
-      # libraries. audible playback needs an audio device and is verified off-CI.
-      - name: Build
+      - name: Build Windows artifacts
         run: |
           set -euo pipefail
-          mach build . --lib audio
-          mach build . --bin play
-          test -f out/linux-x86_64/debug/obj/miniaudio/miniaudio.o || { echo "::error::[step.build-miniaudio] produced no miniaudio object"; exit 1; }
-          test -f out/linux-x86_64/debug/lib/audio || { echo "::error::mach build --lib audio produced no audio library"; exit 1; }
-          test -x out/linux-x86_64/debug/bin/play || { echo "::error::mach build --bin play produced no play binary"; exit 1; }
+          mach dep pull
+          for profile in debug release; do
+            mach build . --target windows --profile "$profile"
+          done
+          cd test/consumer
+          mach dep pull
+          for profile in debug release; do
+            mach build . --target windows --profile "$profile"
+          done
+
+      - name: Verify exact PE imports and relocations
+        run: |
+          set -euo pipefail
+          for profile in debug release; do
+            tools/check-windows-pe.sh \
+              "out/windows/$profile/obj/miniaudio/miniaudio.o" \
+              "out/windows/$profile/bin/play" \
+              "test/consumer/out/windows/$profile/bin/audio-consumer"
+          done
+
+  windows-native:
+    name: Windows native runtime
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install Zig
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
+          $archive = Join-Path $env:RUNNER_TEMP 'zig.zip'
+          $root = Join-Path $env:RUNNER_TEMP 'zig'
+          curl.exe -fsSL "https://ziglang.org/download/$env:ZIG_VERSION/zig-x86_64-windows-$env:ZIG_VERSION.zip" -o $archive
+          Expand-Archive -Path $archive -DestinationPath $root -Force
+          $zig = Get-ChildItem -Path $root -Directory | Select-Object -First 1
+          Add-Content -Path $env:GITHUB_PATH -Value $zig.FullName
+
+      - name: Build current Mach
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
+          $seed = Join-Path $env:RUNNER_TEMP 'mach-release'
+          $src = Join-Path $env:RUNNER_TEMP 'mach-src'
+          $bin = Join-Path $env:RUNNER_TEMP 'bin'
+          New-Item -ItemType Directory -Path $seed, $src, $bin -Force | Out-Null
+          gh release download -R briar-systems/mach -p 'mach-*-x86_64-windows.zip' -D $seed --clobber
+          $zip = Get-ChildItem -Path $seed -Filter 'mach-*-x86_64-windows.zip' | Select-Object -First 1
+          Expand-Archive -Path $zip.FullName -DestinationPath $seed -Force
+          $bootstrap = Get-ChildItem -Path $seed -Filter 'mach.exe' -Recurse | Select-Object -First 1
+          git -C $src init
+          git -C $src remote add origin https://github.com/briar-systems/mach.git
+          git -C $src fetch --depth 1 origin $env:MACH_REF
+          git -C $src checkout --detach FETCH_HEAD
+          Push-Location $src
+          & $bootstrap.FullName dep pull
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & $bootstrap.FullName build . --profile release -o current-mach.exe
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Copy-Item current-mach.exe (Join-Path $bin 'mach.exe') -Force
+          Pop-Location
+          Add-Content -Path $env:GITHUB_PATH -Value $bin
+
+      - name: Build and run native probe
+        shell: bash
+        run: |
+          set -euo pipefail
+          mach.exe dep pull
+          for profile in debug release; do
+            mach.exe build . --target windows --profile "$profile"
+          done
+          cd test/consumer
+          mach.exe dep pull
+          for profile in debug release; do
+            mach.exe build . --target windows --profile "$profile"
+            exe="out/windows/$profile/bin/audio-consumer"
+            "$exe" | tee "$RUNNER_TEMP/audio-consumer-native-$profile.log"
+            grep -q '^consumer smoke ok$' "$RUNNER_TEMP/audio-consumer-native-$profile.log"
+          done
+
+      - name: Verify exact PE imports and relocations
+        shell: bash
+        run: |
+          set -euo pipefail
+          for profile in debug release; do
+            tools/check-windows-pe.sh \
+              "out/windows/$profile/obj/miniaudio/miniaudio.o" \
+              "out/windows/$profile/bin/play" \
+              "test/consumer/out/windows/$profile/bin/audio-consumer"
+          done
+
+  darwin:
+    name: macOS Intel native
+    runs-on: macos-15-intel
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Build current Mach
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/mach-release" "$RUNNER_TEMP/bin"
+          gh release download -R briar-systems/mach \
+            -p 'mach-*-x86_64-darwin.tar.gz' -D "$RUNNER_TEMP/mach-release" --clobber
+          tar -xzf "$RUNNER_TEMP"/mach-release/mach-*-x86_64-darwin.tar.gz \
+            -C "$RUNNER_TEMP/mach-release"
+          install -m 0755 "$RUNNER_TEMP/mach-release/mach" "$RUNNER_TEMP/bootstrap-mach"
+          git init "$RUNNER_TEMP/mach-src"
+          git -C "$RUNNER_TEMP/mach-src" remote add origin https://github.com/briar-systems/mach.git
+          git -C "$RUNNER_TEMP/mach-src" fetch --depth 1 origin "$MACH_REF"
+          git -C "$RUNNER_TEMP/mach-src" checkout --detach FETCH_HEAD
+          cd "$RUNNER_TEMP/mach-src"
+          "$RUNNER_TEMP/bootstrap-mach" dep pull
+          "$RUNNER_TEMP/bootstrap-mach" build . --profile release -o current-mach
+          install -m 0755 current-mach "$RUNNER_TEMP/bin/mach"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+
+      - name: Build and test CoreAudio shim
+        run: |
+          set -euo pipefail
+          mach dep pull
+          for profile in debug release; do
+            if ! mach build . --target darwin --profile "$profile"; then
+              nm -u "out/darwin/$profile/obj/miniaudio/miniaudio.o" || true
+              exit 1
+            fi
+            mach test . --target darwin --profile "$profile"
+            nm -u "out/darwin/$profile/obj/miniaudio/miniaudio.o"
+          done
+
+      - name: Verify external consumer
+        run: |
+          set -euo pipefail
+          cd test/consumer
+          mach dep pull
+          for profile in debug release; do
+            mach build . --target darwin --profile "$profile"
+            exe="out/darwin/$profile/bin/audio-consumer"
+            "$exe" | tee "$RUNNER_TEMP/audio-consumer-darwin-$profile.log"
+            grep -q '^consumer smoke ok$' "$RUNNER_TEMP/audio-consumer-darwin-$profile.log"
+            otool -L "$exe"
+          done
