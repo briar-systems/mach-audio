@@ -83,6 +83,11 @@ void *mad_device_open(unsigned int sample_rate, unsigned int channels, mad_rende
         free(d);
         return NULL;
     }
+    if (ma_device_get_context(&d->device)->backend == ma_backend_null) {
+        ma_device_uninit(&d->device);
+        free(d);
+        return NULL;
+    }
     return d;
 }
 
@@ -133,4 +138,64 @@ unsigned int mad_device_channels(void *dev)
         return 0;
     }
     return ((mad_device *)dev)->device.playback.channels;
+}
+
+typedef struct {
+    volatile ma_uint32 called;
+} mad_probe_state;
+
+static void mad__probe_callback(ma_device *pDevice, void *pOutput, const void *pInput, ma_uint32 frameCount)
+{
+    mad_probe_state *state = (mad_probe_state *)pDevice->pUserData;
+    (void)pInput;
+    memset(pOutput, 0, frameCount * pDevice->playback.channels * sizeof(float));
+    ma_atomic_store_32(&state->called, 1);
+}
+
+/* exercise context, device, thread, callback, stop, and cleanup without hardware. */
+int mad_device_probe_null(void)
+{
+    ma_backend backend = ma_backend_null;
+    ma_context context;
+    ma_device device;
+    mad_probe_state state;
+    ma_device_config config;
+    ma_result stop_result;
+    unsigned int attempt;
+
+    ma_atomic_store_32(&state.called, 0);
+    if (ma_context_init(&backend, 1, NULL, &context) != MA_SUCCESS) {
+        return 1;
+    }
+
+    config = ma_device_config_init(ma_device_type_playback);
+    config.playback.format = ma_format_f32;
+    config.playback.channels = 2;
+    config.sampleRate = 48000;
+    config.dataCallback = mad__probe_callback;
+    config.pUserData = &state;
+    if (ma_device_init(&context, &config, &device) != MA_SUCCESS) {
+        ma_context_uninit(&context);
+        return 2;
+    }
+    if (ma_device_start(&device) != MA_SUCCESS) {
+        ma_device_uninit(&device);
+        ma_context_uninit(&context);
+        return 3;
+    }
+
+    for (attempt = 0; attempt < 50 && ma_atomic_load_32(&state.called) == 0; attempt += 1) {
+        ma_sleep(10);
+    }
+    stop_result = ma_device_stop(&device);
+    ma_device_uninit(&device);
+    ma_context_uninit(&context);
+
+    if (stop_result != MA_SUCCESS) {
+        return 4;
+    }
+    if (ma_atomic_load_32(&state.called) == 0) {
+        return 5;
+    }
+    return 0;
 }
