@@ -35,8 +35,13 @@ playback device over miniaudio (`audio.device`) driven by a render callback,
 and a real-time-safe playback cursor (`audio.stream`) for streaming a decoded
 buffer to it. The effect graph described below remains the roadmap.
 
-Playback is verified end to end on Linux (ALSA / PulseAudio / PipeWire); the
-`play` example decodes a WAV, mixes it, and plays it. See [Playback](#playback).
+The complete device lifecycle is verified against real Linux hardware: the
+`play` example decodes a WAV, mixes it, opens the default PipeWire-backed
+device, starts its callback thread, drains the source, and closes cleanly. The
+same lifecycle is exercised without hardware on every native CI host through
+miniaudio's explicit null backend. Physical Windows and macOS speaker checks
+remain outstanding and are not claimed; see [Targets](#targets) and the
+[device validation checklist](doc/device-validation.md).
 
 ## Design
 
@@ -105,6 +110,11 @@ would only add latency.
 The full decode-to-speakers path lives in [`src/play.mach`](src/play.mach); run
 it with `mach run . --bin play -- some.wav`.
 
+Normal playback refuses miniaudio's null backend. A successful `audio.open` or
+`play` run therefore means that a real platform backend initialized; a machine
+with no usable output device reports an open failure instead of silently
+discarding samples.
+
 ## Native dependency and linking
 
 The device layer follows the ecosystem's native-dependency pattern. miniaudio is
@@ -122,31 +132,51 @@ inherits the step and the platform libs automatically and builds the vendored
 object the same way; `mach` cannot compile the C for them. The pure-Mach modules
 never call into the shim.
 
-miniaudio loads the OS backend at run time via `dlopen`, so the object's own
-link-time requirement is just the C runtime, threads, math, and the dynamic
-loader. The backends it selects per platform:
+[`tools/build-miniaudio.sh`](tools/build-miniaudio.sh) selects only the intended
+backend family plus the null backend used by the lifecycle probe. Linux builds
+with the host `cc`. Windows builds with `zig cc` for the GNU ABI and materialize
+Zig's target-matched MinGW/compiler runtime archives; the manifest attributes
+the shim's measured kernel32 and UCRT imports to their exact DLLs. `ole32.dll`
+is deliberately absent from the PE import table because miniaudio loads it with
+`LoadLibraryA` when WASAPI initializes.
+
+Darwin builds are native-only: the Apple SDK framework headers are not
+redistributable and do not ship with Zig. The shim defines
+`MA_NO_RUNTIME_LINKING`, so CoreFoundation, CoreAudio, and AudioToolbox are
+normal framework dependencies rather than notarization-hostile `dlopen` calls.
+Linux continues to load its audio servers at run time and links only the C
+runtime, threads, math, and dynamic-loader surface.
+
+The selected backends are:
 
 | OS | Backends |
 |---|---|
 | Linux | ALSA, PulseAudio, JACK (PipeWire via its PulseAudio-compatible server) |
-| Windows | WASAPI (DirectSound / WinMM fallback) |
+| Windows | WASAPI |
 | macOS | CoreAudio |
 
 ## Targets
 
-mach-audio's pure-Mach layer builds for every target the Mach compiler
-supports. The device layer's per-OS backends are validated as they land.
+The table separates implementation from validation so a cross-build or a
+hosted null-device run is never presented as a physical speaker test.
 
-| Target | ISA | Pure-Mach layer | Device layer |
-|---|---|---|---|
-| linux | x86_64 | yes | yes (ALSA / PulseAudio / PipeWire) |
-| windows | x86_64 | yes | declared intent (WASAPI; needs a windows shim build) |
-| darwin | x86_64 | yes | declared intent (CoreAudio; needs framework linking) |
+| Target | ISA | Device backend | Automated validation | Physical hardware |
+|---|---|---|---|---|
+| linux | x86_64 | ALSA / PulseAudio / JACK | native build, 37 tests, external lifecycle probe | default PipeWire output opened/started/stopped in debug and release; audible result not independently asserted |
+| windows | x86_64 | WASAPI | Linux cross-link, exact PE inspection, Wine WASAPI run, native external lifecycle probe | pending |
+| darwin | x86_64 | CoreAudio | native Intel build and external lifecycle probe | pending |
 
 ## Tests
 
-`test` blocks live beside the code they cover and are display-free: the sample
-primitives and the playback cursor are exercised directly, with no device open
-and no audio hardware, so the suite runs headless in CI. Paths that need a live
-device (the callback and real playback) are verified by running the `play`
-example, not by `mach test`.
+`test` blocks live beside the code they cover and are display-free. In addition
+to the pure sample primitives and playback cursor, `audio.device` initializes a
+null-backend context and device, starts its native thread, waits for the render
+callback, stops it, and releases both objects. The separate
+[`test/consumer`](test/consumer) fixture repeats that lifecycle through a path
+dependency, proving that the vendored build step and all static/dynamic link
+requirements cascade to consumers.
+
+The null probe verifies native ABI and lifecycle behavior, not sound. Audible
+playback remains a manual hardware check using `play`; the exact steps and the
+current evidence ledger live in
+[`doc/device-validation.md`](doc/device-validation.md).

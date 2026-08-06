@@ -14,10 +14,9 @@
 # decoded Buffer (audio.stream) satisfies this; anything that can page-fault,
 # wait on a mutex, or call the allocator does not.
 #
-# LINKING. a program that opens a device links the compiled shim object and the
-# platform audio libraries. those requirements are declared in this project's
-# mach.toml (`[bin.play] libs` for the shim object, `[os.<name>] libs` for the
-# system libraries) and cascade to consumers; the pure-mach layer links nothing.
+# LINKING. a program that opens a device inherits the vendored shim build, local
+# runtime archives, and target-filtered system/framework links from mach.toml.
+# those requirements cascade to consumers; the pure-mach layer links nothing.
 
 use std.types.result.Result;
 use std.types.result.ok;
@@ -82,7 +81,8 @@ pub rec Device {
 # format: requested rate and channel layout; channels must be >= 1
 # render: callback invoked on the audio thread to fill output (see RenderFn)
 # user:   opaque pointer handed back to every render call
-# ret:    an open Device, or an error if the format is invalid or the backend fails
+# ret:    an open Device, or an error if the format is invalid, no real backend
+#         is available, or the selected backend fails
 pub fun open(format: buffer.Format, render: RenderFn, user: ptr) Result[Device, str] {
     if (format.channels == 0) { ret err[Device, str]("format requires at least one channel"); }
     if (render == nil) { ret err[Device, str]("render callback is nil"); }
