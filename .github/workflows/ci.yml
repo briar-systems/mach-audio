@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 env:
-  MACH_REF: 2b8bb485afa22c6303227f5594d75bf75ee027dd
+  MACH_REF: c3bdb30ee0ac1eadefe0d2b7a58a13b8321a836d
   ZIG_VERSION: "0.16.0"
 
 jobs:
