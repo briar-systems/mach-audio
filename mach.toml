@@ -1,10 +1,8 @@
 [project]
-id          = "audio"
-name        = "Mach Audio Library"
-description = "Mach audio playback and decoding library"
-version     = "0.2.0"
-src         = "src"
-out         = "out/{target.name}/{profile.name}"
+id      = "audio"
+version = "0.3.0"
+src     = "src"
+out     = "out/{target.name}/{profile.name}"
 
 [target.linux-x86_64]
 isa = "x86_64"
@@ -22,10 +20,14 @@ os  = "darwin"
 abi = "sysv64"
 
 [profile.debug]
-opt = 0
+opt   = 0
+debug = true
+simd = "scalarize"
 
 [profile.release]
-opt = 2
+opt   = 2
+debug = false
+simd = "scalarize"
 
 [artifact.audio]
 kind    = "static"
@@ -33,6 +35,7 @@ entry   = "audio.mach"
 out     = "lib/audio"
 targets = ["*"]
 link    = ["miniaudio-local", "pthread", "m", "dl", "rt", "ole32"]
+need    = []
 
 [artifact.play]
 kind    = "bin"
@@ -40,47 +43,61 @@ entry   = "play.mach"
 out     = "bin/play"
 targets = ["*"]
 link    = ["miniaudio-local", "pthread", "m", "dl", "rt", "ole32"]
+need    = []
 
 [link.miniaudio-local]
 source = "local"
 path   = "{project.out}/obj/miniaudio/miniaudio.o"
 os     = ["linux"]
+isa    = "*"
+abi    = "*"
 export = true
 
 [link.pthread]
 source = "system"
 name   = "pthread"
 os     = ["linux"]
+isa    = "*"
+abi    = "*"
 export = true
 
 [link.m]
 source = "system"
 name   = "m"
 os     = ["linux"]
+isa    = "*"
+abi    = "*"
 export = true
 
 [link.dl]
 source = "system"
 name   = "dl"
 os     = ["linux"]
+isa    = "*"
+abi    = "*"
 export = true
 
 [link.rt]
 source = "system"
 name   = "rt"
 os     = ["linux"]
+isa    = "*"
+abi    = "*"
 export = true
 
 [link.ole32]
 source = "system"
 name   = "ole32.dll"
 os     = ["windows"]
+isa    = "*"
+abi    = "*"
 export = true
 
 [step.build-miniaudio]
-cmd = "mkdir -p {project.out}/obj/miniaudio && cc -c -O2 -fPIC -w vendor/mad.c -o {project.out}/obj/miniaudio/miniaudio.o"
-in  = ["vendor/mad.c", "vendor/miniaudio.h"]
-out = ["{project.out}/obj/miniaudio/miniaudio.o"]
+cmd  = "mkdir -p {project.out}/obj/miniaudio && cc -c -O2 -fPIC -w vendor/mad.c -o {project.out}/obj/miniaudio/miniaudio.o"
+in   = ["vendor/mad.c", "vendor/miniaudio.h"]
+out  = ["{project.out}/obj/miniaudio/miniaudio.o"]
+need = []
 
 [dep.mach-std]
 git = "https://github.com/briar-systems/mach-std"
