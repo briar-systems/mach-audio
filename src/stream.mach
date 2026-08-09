@@ -27,14 +27,30 @@ use buffer: audio.buffer;
 # frames:   total frames available in samples
 # channels: interleaved channel count of samples
 # cursor:   next frame to emit
+# frac:     fractional offset into the current frame, 0 to 1, used when rate
+#           is not 1. kept beside the integer cursor rather than folded into a
+#           float position so a long clip cannot lose precision as it plays and
+#           so rate 1 stays an exact copy
+# rate:     playback speed, 1 being the source's own rate. 2 is an octave up
+#           and half the duration
 # looping:  restart at the end instead of emitting silence
 pub rec Stream {
     samples:  *f32;
     frames:   usize;
     channels: u16;
     cursor:   usize;
+    frac:     f32;
+    rate:     f32;
     looping:  bool;
 }
+
+# The slowest and fastest a stream may be played.
+#
+# Bounded because a rate at or below zero never advances, which is an audible
+# hang rather than an error, and an unbounded upper rate reads the whole clip
+# in one callback for no useful effect.
+pub val RATE_MIN: f32 = 0.05;
+pub val RATE_MAX: f32 = 16.0;
 
 # build a Stream over a decoded Buffer, positioned at the first frame
 # ---
@@ -47,8 +63,25 @@ pub fun stream_over(buf: *buffer.Buffer, looping: bool) Stream {
     s.frames   = buf.frames;
     s.channels = buf.format.channels;
     s.cursor   = 0;
+    s.frac     = 0.0;
+    s.rate     = 1.0;
     s.looping  = looping;
     ret s;
+}
+
+# set the playback speed, clamped to RATE_MIN..RATE_MAX
+#
+# Changing rate mid-stream is fine and does not reposition the cursor, so a
+# pitch envelope is a per-callback write rather than a restart.
+# ---
+# s:    the stream to retune
+# rate: playback speed, 1 being the source's own rate
+pub fun stream_set_rate(s: *Stream, rate: f32) {
+    if (s == nil) { ret; }
+    var r: f32 = rate;
+    if (r < RATE_MIN) { r = RATE_MIN; }
+    if (r > RATE_MAX) { r = RATE_MAX; }
+    s.rate = r;
 }
 
 # emit frame_count frames into out, advancing the cursor
@@ -74,11 +107,39 @@ pub fun pull(s: *Stream, out: *f32, frame_count: u32, channels: u32) {
         ret;
     }
 
+    # RATE 1 IS A COPY, NOT A RESAMPLE. Interpolating at rate 1 would weight
+    # every frame by a fraction that is always zero, which is the same samples
+    # through more arithmetic, and any drift in the accumulator would detune a
+    # clip nobody asked to retune.
+    if (s.rate == 1.0 && s.frac == 0.0) {
+        var f: usize = 0;
+        for (f < fc) {
+            if (s.cursor >= s.frames) {
+                if (s.looping) {
+                    s.cursor = 0;
+                } or {
+                    var c0: usize = 0;
+                    for (c0 < ch) { out[f * ch + c0] = 0.0; c0 = c0 + 1; }
+                    f = f + 1;
+                    cnt;
+                }
+            }
+            var c: usize = 0;
+            for (c < ch) {
+                out[f * ch + c] = s.samples[s.cursor * ch + c];
+                c = c + 1;
+            }
+            s.cursor = s.cursor + 1;
+            f        = f + 1;
+        }
+        ret;
+    }
+
     var f: usize = 0;
     for (f < fc) {
         if (s.cursor >= s.frames) {
             if (s.looping) {
-                s.cursor = 0;
+                s.cursor = s.cursor % s.frames;
             } or {
                 var c0: usize = 0;
                 for (c0 < ch) { out[f * ch + c0] = 0.0; c0 = c0 + 1; }
@@ -86,12 +147,36 @@ pub fun pull(s: *Stream, out: *f32, frame_count: u32, channels: u32) {
                 cnt;
             }
         }
+
+        # The frame after this one, which is the start again when looping. A
+        # non-looping stream holds its last frame rather than interpolating
+        # toward silence, so the tail does not click.
+        var nxt: usize = s.cursor + 1;
+        if (nxt >= s.frames) {
+            if (s.looping) { nxt = 0; }
+            or             { nxt = s.cursor; }
+        }
+
         var c: usize = 0;
         for (c < ch) {
-            out[f * ch + c] = s.samples[s.cursor * ch + c];
+            val a: f32 = s.samples[s.cursor * ch + c];
+            val b: f32 = s.samples[nxt * ch + c];
+            out[f * ch + c] = a + (b - a) * s.frac;
             c = c + 1;
         }
-        s.cursor = s.cursor + 1;
+
+        var adv: f32 = s.frac + s.rate;
+        var whole: usize = 0;
+        for (adv >= 1.0) {
+            adv   = adv - 1.0;
+            whole = whole + 1;
+        }
+        s.frac   = adv;
+        s.cursor = s.cursor + whole;
+        # Normalized here rather than at the next pull, so the cursor is always
+        # a valid frame index and a caller inspecting it between pulls is not
+        # looking at a value past the end.
+        if (s.looping && s.cursor >= s.frames) { s.cursor = s.cursor % s.frames; }
         f        = f + 1;
     }
 }
@@ -114,6 +199,8 @@ test "stream: pull copies frames and advances the cursor" {
     s.frames   = 4;
     s.channels = 2;
     s.cursor   = 0;
+    s.frac     = 0.0;
+    s.rate     = 1.0;
     s.looping  = false;
 
     var out: [4]f32;
@@ -131,6 +218,8 @@ test "stream: pull zero-fills past the end when not looping" {
     s.frames   = 1;
     s.channels = 2;
     s.cursor   = 0;
+    s.frac     = 0.0;
+    s.rate     = 1.0;
     s.looping  = false;
 
     var out: [6]f32 = [6]f32{9.0, 9.0, 9.0, 9.0, 9.0, 9.0};
@@ -148,6 +237,8 @@ test "stream: looping wraps to the start" {
     s.frames   = 2;
     s.channels = 1;
     s.cursor   = 0;
+    s.frac     = 0.0;
+    s.rate     = 1.0;
     s.looping  = true;
 
     var out: [5]f32;
@@ -165,6 +256,8 @@ test "stream: channel mismatch yields silence" {
     s.frames   = 4;
     s.channels = 1;
     s.cursor   = 0;
+    s.frac     = 0.0;
+    s.rate     = 1.0;
     s.looping  = false;
 
     var out: [4]f32 = [4]f32{9.0, 9.0, 9.0, 9.0};
@@ -189,4 +282,122 @@ test "stream: stream_over borrows the buffer at frame zero" {
 
     if (!buffer.dnit(?buf)) { ret 1; }
     ret 0;
+}
+
+test "stream: rate 1 returns the source sample for sample" {
+    # This pins the values, not the fast path. At rate 1 with no accumulated
+    # fraction the interpolator is arithmetically identical to the copy, so
+    # deleting the fast path is invisible here and no test can see it: it is an
+    # optimization and a guard against accumulator drift, not a behaviour.
+    var src: [4]f32 = [4]f32{0.1, 0.2, 0.3, 0.4};
+    var s: Stream;
+    s.samples  = ?src[0];
+    s.frames   = 4;
+    s.channels = 1;
+    s.cursor   = 0;
+    s.frac     = 0.0;
+    s.rate     = 1.0;
+    s.looping  = false;
+
+    var out: [4]f32;
+    pull(?s, ?out[0], 4, 1);
+    if (out[0] != 0.1 || out[1] != 0.2 || out[2] != 0.3 || out[3] != 0.4) { ret 1; }
+    ret 0;
+}
+
+test "stream: half rate interpolates between neighbours" {
+    var src: [3]f32 = [3]f32{0.0, 1.0, 0.0};
+    var s: Stream;
+    s.samples  = ?src[0];
+    s.frames   = 3;
+    s.channels = 1;
+    s.cursor   = 0;
+    s.frac     = 0.0;
+    s.rate     = 0.5;
+    s.looping  = false;
+
+    var out: [4]f32;
+    pull(?s, ?out[0], 4, 1);
+    # Positions 0.0, 0.5, 1.0, 1.5 over the ramp 0, 1, 0.
+    if (out[0] != 0.0) { ret 1; }
+    if (out[1] != 0.5) { ret 2; }
+    if (out[2] != 1.0) { ret 3; }
+    if (out[3] != 0.5) { ret 4; }
+    ret 0;
+}
+
+test "stream: double rate advances two source frames per output frame" {
+    var src: [4]f32 = [4]f32{0.0, 0.1, 0.2, 0.3};
+    var s: Stream;
+    s.samples  = ?src[0];
+    s.frames   = 4;
+    s.channels = 1;
+    s.cursor   = 0;
+    s.frac     = 0.0;
+    s.rate     = 2.0;
+    s.looping  = false;
+
+    var out: [2]f32;
+    pull(?s, ?out[0], 2, 1);
+    if (out[0] != 0.0) { ret 1; }
+    if (out[1] != 0.2) { ret 2; }
+    if (s.cursor != 4) { ret 3; }
+    if (!done(s))      { ret 4; }
+    ret 0;
+}
+
+test "stream: a retuned stream still ends and still loops" {
+    # The resampling path has its own end and wrap handling, so both have to be
+    # pinned there too. A stream that never reports done leaks a voice forever.
+    var src: [2]f32 = [2]f32{1.0, 2.0};
+    var s: Stream;
+    s.samples  = ?src[0];
+    s.frames   = 2;
+    s.channels = 1;
+    s.cursor   = 0;
+    s.frac     = 0.0;
+    s.rate     = 1.5;
+    s.looping  = false;
+
+    var out: [4]f32 = [4]f32{9.0, 9.0, 9.0, 9.0};
+    pull(?s, ?out[0], 4, 1);
+    if (!done(s))       { ret 1; }
+    if (out[3] != 0.0)  { ret 2; }
+
+    var l: Stream;
+    l.samples  = ?src[0];
+    l.frames   = 2;
+    l.channels = 1;
+    l.cursor   = 0;
+    l.frac     = 0.0;
+    l.rate     = 1.5;
+    l.looping  = true;
+
+    var lout: [8]f32;
+    pull(?l, ?lout[0], 8, 1);
+    if (done(l))            { ret 3; }
+    if (l.cursor >= l.frames) { ret 4; }
+    ret 0;
+}
+
+test "stream: the rate setter clamps rather than hanging or racing" {
+    var b: buffer.Buffer = empty_buffer();
+    var s: Stream = stream_over(?b, false);
+    stream_set_rate(?s, 0.0);
+    if (s.rate != RATE_MIN) { ret 1; }
+    stream_set_rate(?s, -4.0);
+    if (s.rate != RATE_MIN) { ret 2; }
+    stream_set_rate(?s, 1000.0);
+    if (s.rate != RATE_MAX) { ret 3; }
+    stream_set_rate(?s, 1.5);
+    if (s.rate != 1.5) { ret 4; }
+    ret 0;
+}
+
+fun empty_buffer() buffer.Buffer {
+    var b: buffer.Buffer;
+    b.samples = nil;
+    b.frames  = 0;
+    b.format.channels = 1;
+    ret b;
 }
