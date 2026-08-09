@@ -31,6 +31,7 @@ fwd mixer.Source;
 fwd mixer.apply_gain;
 fwd mixer.clamp_samples;
 fwd mixer.mix_add;
+fwd mixer.mix_add_pan;
 fwd mixer.mix;
 fwd mixer.mono_to_stereo;
 fwd mixer.stereo_to_mono;
@@ -42,6 +43,9 @@ fwd wav.decode;
 
 fwd stream.Stream;
 fwd stream.stream_over;
+fwd stream.stream_set_rate;
+fwd stream.RATE_MIN;
+fwd stream.RATE_MAX;
 fwd stream.pull;
 fwd stream.done;
 
