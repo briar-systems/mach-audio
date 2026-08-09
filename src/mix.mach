@@ -98,6 +98,42 @@ pub fun mix_add(dst: *f32, src: *f32, n: usize, gain: f32) {
     }
 }
 
+# accumulate src onto dst with a per-channel gain
+#
+# The stereo form of mix_add. Panning is a different gain per channel, so a
+# single-gain accumulate cannot express it however it is called.
+#
+# THE GAINS ARE THE CALLER'S, not a pan position. Which pan law applies is a
+# mixing-policy decision that depends on the medium, and computing it here would
+# put a square root in a module that has no float maths and does not need one.
+# This accumulates with the gains it is handed.
+#
+# A non-stereo destination ignores the pan and applies the mean of the two
+# gains, because there is no left and right to place a source between.
+# ---
+# dst:      destination bus, frames * channels samples, added onto in place
+# src:      source samples, frames * channels samples
+# frames:   number of frames to accumulate
+# channels: interleaved channel count shared by dst and src
+# left:     linear gain for channel 0
+# right:    linear gain for channel 1
+pub fun mix_add_pan(dst: *f32, src: *f32, frames: usize, channels: usize,
+                    left: f32, right: f32) {
+    if (dst == nil || src == nil || channels == 0) { ret; }
+
+    if (channels != 2) {
+        mix_add(dst, src, frames * channels, (left + right) * 0.5::f32);
+        ret;
+    }
+
+    var f: usize = 0;
+    for (f < frames) {
+        dst[f * 2]     = dst[f * 2]     + src[f * 2]     * left;
+        dst[f * 2 + 1] = dst[f * 2 + 1] + src[f * 2 + 1] * right;
+        f = f + 1;
+    }
+}
+
 # sum count gain-scaled sources into dst, then saturating-clamp
 #
 # dst is overwritten, not accumulated onto: it is zeroed, every source is added
@@ -258,5 +294,38 @@ test "mix: stereo_to_mono averages channels" {
     if (dst[0] != 0.5) { ret 1; }
     if (dst[1] != 0.0) { ret 1; }
     if (dst[2] != 0.2) { ret 1; }
+    ret 0;
+}
+
+test "mix: mix_add_pan applies a gain per channel" {
+    var dst: [4]f32 = [4]f32{0.0, 0.0, 0.0, 0.0};
+    var src: [4]f32 = [4]f32{1.0, 1.0, 0.5, 0.5};
+    mix_add_pan(?dst[0], ?src[0], 2, 2, 0.25, 0.75);
+    if (dst[0] != 0.25)  { ret 1; }
+    if (dst[1] != 0.75)  { ret 2; }
+    if (dst[2] != 0.125) { ret 3; }
+    if (dst[3] != 0.375) { ret 4; }
+    ret 0;
+}
+
+test "mix: mix_add_pan accumulates rather than overwriting" {
+    var dst: [2]f32 = [2]f32{0.5, 0.5};
+    var src: [2]f32 = [2]f32{1.0, 1.0};
+    mix_add_pan(?dst[0], ?src[0], 1, 2, 0.5, 0.5);
+    if (dst[0] != 1.0) { ret 1; }
+    if (dst[1] != 1.0) { ret 2; }
+    ret 0;
+}
+
+test "mix: a non-stereo bus gets the mean of the two gains" {
+    # There is no left and right to place a source between, so the pan cannot
+    # apply. Dropping to one channel's gain would make a mono device quieter
+    # or louder depending on which side the source happened to sit.
+    var dst: [3]f32 = [3]f32{0.0, 0.0, 0.0};
+    var src: [3]f32 = [3]f32{1.0, 1.0, 1.0};
+    mix_add_pan(?dst[0], ?src[0], 3, 1, 0.2, 0.8);
+    if (dst[0] != 0.5) { ret 1; }
+    if (dst[1] != 0.5) { ret 2; }
+    if (dst[2] != 0.5) { ret 3; }
     ret 0;
 }
