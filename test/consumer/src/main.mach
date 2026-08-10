@@ -4,7 +4,6 @@ use std.runtime;
 use print: std.print;
 use audio;
 
-#[symbol("mad_device_probe_null")]
 ext fun mad_device_probe_null() i32;
 
 #[symbol("main")]

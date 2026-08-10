@@ -38,30 +38,23 @@ use buffer: audio.buffer;
 pub def RenderFn: fun(*f32, u32, u32, ptr);
 
 # open an f32 playback device; returns an opaque handle or nil on failure
-#[symbol("mad_device_open")]
 ext fun mad_device_open(sample_rate: u32, channels: u32, render: RenderFn, user: ptr) ptr;
 
 # start the device's audio thread; 0 on success
-#[symbol("mad_device_start")]
 ext fun mad_device_start(dev: ptr) i32;
 
 # stop the device's audio thread; 0 on success
-#[symbol("mad_device_stop")]
 ext fun mad_device_stop(dev: ptr) i32;
 
 # stop and release the device and its handle
-#[symbol("mad_device_close")]
 ext fun mad_device_close(dev: ptr);
 
 # the active sample rate the callback is fed
-#[symbol("mad_device_sample_rate")]
 ext fun mad_device_sample_rate(dev: ptr) u32;
 
 # the active channel count the callback is fed
-#[symbol("mad_device_channels")]
 ext fun mad_device_channels(dev: ptr) u32;
 
-#[symbol("mad_device_probe_null")]
 ext fun mad_device_probe_null() i32;
 
 # an open playback device driven by a render callback
