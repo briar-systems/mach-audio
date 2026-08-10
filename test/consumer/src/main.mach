@@ -1,0 +1,17 @@
+# external consumer proving the exported native link and step cascade.
+
+use std.runtime;
+use print: std.print;
+use audio;
+
+ext fun mad_device_probe_null() i32;
+
+#[symbol("main")]
+fun main(argc: i64, argv: **u8) i64 {
+    var device: audio.Device;
+    device.handle = nil;
+    if (audio.sample_rate(device) != 0) { ret 1; }
+    if (mad_device_probe_null() != 0) { ret 1; }
+    print.println("consumer smoke ok");
+    ret 0;
+}

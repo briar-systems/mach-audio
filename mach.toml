@@ -34,21 +34,60 @@ kind    = "static"
 entry   = "audio.mach"
 out     = "lib/audio"
 targets = ["*"]
-link    = ["miniaudio-local", "pthread", "m", "dl", "rt", "ole32"]
+link    = [
+    "miniaudio-local", "mingw32", "compiler-rt",
+    "pthread", "m", "dl", "rt",
+    "kernel32", "ucrt-heap", "ucrt-string", "ucrt-stdio",
+    "libSystem", "CoreFoundation", "CoreAudio", "AudioToolbox",
+]
 need    = []
 
 [artifact.play]
 kind    = "bin"
 entry   = "play.mach"
 out     = "bin/play"
-targets = ["*"]
-link    = ["miniaudio-local", "pthread", "m", "dl", "rt", "ole32"]
+targets = ["linux-x86_64", "darwin"]
+link    = [
+    "miniaudio-local", "mingw32", "compiler-rt",
+    "pthread", "m", "dl", "rt",
+    "kernel32", "ucrt-heap", "ucrt-string", "ucrt-stdio",
+    "libSystem", "CoreFoundation", "CoreAudio", "AudioToolbox",
+]
+need    = []
+
+[artifact.play-windows]
+kind    = "bin"
+entry   = "play.mach"
+out     = "bin/play.exe"
+targets = ["windows"]
+link    = [
+    "miniaudio-local", "mingw32", "compiler-rt",
+    "pthread", "m", "dl", "rt",
+    "kernel32", "ucrt-heap", "ucrt-string", "ucrt-stdio",
+    "libSystem", "CoreFoundation", "CoreAudio", "AudioToolbox",
+]
 need    = []
 
 [link.miniaudio-local]
 source = "local"
 path   = "{project.out}/obj/miniaudio/miniaudio.o"
-os     = ["linux"]
+os     = ["linux", "windows", "darwin"]
+isa    = "*"
+abi    = "*"
+export = true
+
+[link.mingw32]
+source = "local"
+path   = "{project.out}/obj/miniaudio/mingw/libmingw32.lib"
+os     = ["windows"]
+isa    = "*"
+abi    = "*"
+export = true
+
+[link.compiler-rt]
+source = "local"
+path   = "{project.out}/obj/miniaudio/mingw/compiler_rt.lib"
+os     = ["windows"]
 isa    = "*"
 abi    = "*"
 export = true
@@ -85,18 +124,122 @@ isa    = "*"
 abi    = "*"
 export = true
 
-[link.ole32]
+[link.kernel32]
 source = "system"
-name   = "ole32.dll"
+name   = "kernel32.dll"
+library = "kernel32.dll"
+symbols = [
+    "CloseHandle", "CreateEventA", "CreateSemaphoreA", "CreateThread",
+    "FreeLibrary", "GetLastError", "GetProcAddress", "LoadLibraryA",
+    "QueryPerformanceCounter", "QueryPerformanceFrequency",
+    "ReleaseSemaphore", "ResetEvent", "SetEvent", "SetThreadPriority",
+    "Sleep", "WaitForSingleObject", "WideCharToMultiByte",
+]
 os     = ["windows"]
 isa    = "*"
 abi    = "*"
 export = true
 
+[link.ucrt-heap]
+source = "system"
+name   = "api-ms-win-crt-heap-l1-1-0.dll"
+symbols = ["malloc", "free", "realloc"]
+os     = ["windows"]
+isa    = "*"
+abi    = "*"
+export = true
+
+[link.ucrt-string]
+source = "system"
+name   = "api-ms-win-crt-string-l1-1-0.dll"
+symbols = ["wcslen"]
+os     = ["windows"]
+isa    = "*"
+abi    = "*"
+export = true
+
+[link.ucrt-stdio]
+source = "system"
+name   = "api-ms-win-crt-stdio-l1-1-0.dll"
+symbols = ["__stdio_common_vsprintf"]
+os     = ["windows"]
+isa    = "*"
+abi    = "*"
+export = true
+
+[link.libSystem]
+source = "system"
+name   = "/usr/lib/libSystem.B.dylib"
+library = "/usr/lib/libSystem.B.dylib"
+symbols = [
+    "___chkstk_darwin", "__assert_rtn", "__bzero", "__stack_chk_fail",
+    "__stack_chk_guard", "clock_gettime", "exp", "free", "gettimeofday",
+    "mach_absolute_time", "malloc", "memcpy", "memset",
+    "pthread_attr_destroy", "pthread_attr_getschedparam", "pthread_attr_init",
+    "pthread_attr_setinheritsched", "pthread_attr_setschedparam",
+    "pthread_attr_setschedpolicy", "pthread_attr_setstacksize",
+    "pthread_cond_broadcast", "pthread_cond_destroy", "pthread_cond_init",
+    "pthread_cond_signal", "pthread_cond_wait", "pthread_create",
+    "pthread_join", "pthread_mutex_destroy", "pthread_mutex_init",
+    "pthread_mutex_lock", "pthread_mutex_unlock", "realloc",
+    "sched_get_priority_max", "sched_get_priority_min", "select$1050", "sin",
+    "strcmp", "strlen", "usleep", "vsnprintf",
+]
+os     = ["darwin"]
+isa    = "*"
+abi    = "*"
+export = true
+
+[link.CoreFoundation]
+source = "framework"
+name   = "CoreFoundation"
+symbols = ["CFRelease", "CFStringGetCString"]
+os     = ["darwin"]
+isa    = "*"
+abi    = "*"
+export = true
+
+[link.CoreAudio]
+source = "framework"
+name   = "CoreAudio"
+symbols = [
+    "AudioObjectAddPropertyListener", "AudioObjectGetPropertyData",
+    "AudioObjectGetPropertyDataSize", "AudioObjectRemovePropertyListener",
+    "AudioObjectSetPropertyData",
+]
+os     = ["darwin"]
+isa    = "*"
+abi    = "*"
+export = true
+
+[link.AudioToolbox]
+source = "framework"
+name   = "AudioToolbox"
+symbols = [
+    "AudioComponentFindNext", "AudioComponentInstanceDispose",
+    "AudioComponentInstanceNew", "AudioOutputUnitStart", "AudioOutputUnitStop",
+    "AudioUnitAddPropertyListener", "AudioUnitGetProperty",
+    "AudioUnitGetPropertyInfo", "AudioUnitInitialize", "AudioUnitRender",
+    "AudioUnitSetProperty",
+]
+os     = ["darwin"]
+isa    = "*"
+abi    = "*"
+export = true
+
 [step.build-miniaudio]
-cmd  = "mkdir -p {project.out}/obj/miniaudio && cc -c -O2 -fPIC -w vendor/mad.c -o {project.out}/obj/miniaudio/miniaudio.o"
-in   = ["vendor/mad.c", "vendor/miniaudio.h"]
+cmd  = "bash tools/build-miniaudio.sh {project.out}/obj/miniaudio/miniaudio.o"
+in   = ["tools/build-miniaudio.sh", "vendor/mad.c", "vendor/miniaudio.h"]
 out  = ["{project.out}/obj/miniaudio/miniaudio.o"]
+need = []
+
+[step.mingw-runtime]
+cmd  = "bash tools/materialize-mingw-runtime.sh {project.out}/obj/miniaudio/mingw/libmingw32.lib {project.out}/obj/miniaudio/mingw/compiler_rt.lib"
+in   = ["tools/materialize-mingw-runtime.sh"]
+out  = [
+    "{project.out}/obj/miniaudio/mingw/libmingw32.lib",
+    "{project.out}/obj/miniaudio/mingw/compiler_rt.lib",
+]
 need = []
 
 [dep.mach-std]

@@ -1,0 +1,49 @@
+[project]
+id = "audio-consumer"
+version = "0.0.0"
+src = "src"
+out = "out/{target.name}/{profile.name}"
+
+[target.linux-x86_64]
+isa = "x86_64"
+os = "linux"
+abi = "sysv64"
+
+[target.windows]
+isa = "x86_64"
+os = "windows"
+abi = "win64"
+
+[target.darwin]
+isa = "x86_64"
+os = "darwin"
+abi = "sysv64"
+
+[profile.debug]
+opt = 0
+debug = true
+simd = "scalarize"
+
+[profile.release]
+opt = 2
+debug = false
+simd = "scalarize"
+
+[artifact.audio-consumer]
+kind = "bin"
+entry = "main.mach"
+out = "bin/audio-consumer"
+targets = ["linux-x86_64", "darwin"]
+link = []
+need = []
+
+[artifact.audio-consumer-windows]
+kind = "bin"
+entry = "main.mach"
+out = "bin/audio-consumer.exe"
+targets = ["windows"]
+link = []
+need = []
+
+[dep.audio]
+path = "../.."

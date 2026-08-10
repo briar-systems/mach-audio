@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- device: Build and link the vendored shim for Windows WASAPI and native macOS CoreAudio, with exact foreign-import attribution and exported dependency steps.
+- test: Exercise the native null-device lifecycle directly and through an external consuming project on every supported host.
+
+### Changed
+- device: Reject the null backend from normal playback so a missing hardware backend cannot report false success.
+- build: Require Mach 4.18.1 or newer for the native foreign-object link path.
+- windows: Remove the unused `ole32.dll` link; miniaudio loads it at runtime for WASAPI.
+
 ## [0.4.1] - 2026-08-09
 
 ### Fixed
