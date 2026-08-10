@@ -9,6 +9,7 @@ permissions:
   contents: read
 
 env:
+  MACH_VERSION: "v4.18.1"
   ZIG_VERSION: "0.16.0"
 
 jobs:
@@ -24,7 +25,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/mach-release" "$RUNNER_TEMP/bin"
-          gh release download -R briar-systems/mach \
+          gh release download "$MACH_VERSION" -R briar-systems/mach \
             -p 'mach-*-x86_64-linux.tar.gz' -D "$RUNNER_TEMP/mach-release" --clobber
           tar -xzf "$RUNNER_TEMP"/mach-release/mach-*-x86_64-linux.tar.gz \
             -C "$RUNNER_TEMP/mach-release"
@@ -78,7 +79,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/mach-release" "$RUNNER_TEMP/bin"
-          gh release download -R briar-systems/mach \
+          gh release download "$MACH_VERSION" -R briar-systems/mach \
             -p 'mach-*-x86_64-linux.tar.gz' -D "$RUNNER_TEMP/mach-release" --clobber
           tar -xzf "$RUNNER_TEMP"/mach-release/mach-*-x86_64-linux.tar.gz \
             -C "$RUNNER_TEMP/mach-release"
@@ -138,7 +139,7 @@ jobs:
           $seed = Join-Path $env:RUNNER_TEMP 'mach-release'
           $bin = Join-Path $env:RUNNER_TEMP 'bin'
           New-Item -ItemType Directory -Path $seed, $bin -Force | Out-Null
-          gh release download -R briar-systems/mach -p 'mach-*-x86_64-windows.zip' -D $seed --clobber
+          gh release download $env:MACH_VERSION -R briar-systems/mach -p 'mach-*-x86_64-windows.zip' -D $seed --clobber
           $zip = Get-ChildItem -Path $seed -Filter 'mach-*-x86_64-windows.zip' | Select-Object -First 1
           Expand-Archive -Path $zip.FullName -DestinationPath $seed -Force
           $mach = Get-ChildItem -Path $seed -Filter 'mach.exe' -Recurse | Select-Object -First 1
@@ -188,7 +189,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/mach-release" "$RUNNER_TEMP/bin"
-          gh release download -R briar-systems/mach \
+          gh release download "$MACH_VERSION" -R briar-systems/mach \
             -p 'mach-*-x86_64-darwin.tar.gz' -D "$RUNNER_TEMP/mach-release" --clobber
           tar -xzf "$RUNNER_TEMP"/mach-release/mach-*-x86_64-darwin.tar.gz \
             -C "$RUNNER_TEMP/mach-release"
