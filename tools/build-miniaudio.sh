@@ -6,6 +6,7 @@ cd "$(dirname "$0")/.."
 out=${1:?usage: tools/build-miniaudio.sh <output>}
 isa=${MACH_TARGET_ISA:-x86_64}
 os=${MACH_TARGET_OS:-linux}
+flags=
 
 case $(uname -s) in
 Linux) host=linux ;;
@@ -40,6 +41,8 @@ darwin)
     defs="-DMA_ENABLE_ONLY_SPECIFIC_BACKENDS -DMA_ENABLE_COREAUDIO -DMA_ENABLE_NULL -DMA_NO_RUNTIME_LINKING"
     cc=${CC:-cc}
     target="-arch $isa"
+    # mach#2973: keep clang from emitting unsupported SUBTRACTOR relocation pairs.
+    flags=-fno-jump-tables
     pic=
     ;;
 *)
@@ -49,4 +52,4 @@ darwin)
 esac
 
 mkdir -p "$(dirname "$out")"
-$cc $target -c -O2 -w $pic $defs vendor/mad.c -o "$out"
+$cc $target -c -O2 -w $flags $pic $defs vendor/mad.c -o "$out"

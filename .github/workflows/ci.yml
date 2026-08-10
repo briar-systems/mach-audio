@@ -201,7 +201,11 @@ jobs:
           set -euo pipefail
           mach dep pull
           for profile in debug release; do
-            mach build . --target darwin --profile "$profile"
+            if ! mach build . --target darwin --profile "$profile"; then
+              otool -rv "out/darwin/$profile/obj/miniaudio/miniaudio.o" | \
+                awk '/^Relocation information/{section=$0} /SUBTRACTOR/{print section; print}'
+              exit 1
+            fi
             mach test . --target darwin --profile "$profile"
           done
 
