@@ -42,7 +42,8 @@ darwin)
     cc=${CC:-cc}
     target="-arch $isa"
     # mach#2973: keep clang from emitting unsupported SUBTRACTOR relocation pairs.
-    flags=-fno-jump-tables
+    # mach#2974: emit tentative globals into BSS instead of unsupported common symbols.
+    flags="-fno-jump-tables -fno-common"
     pic=
     ;;
 *)
