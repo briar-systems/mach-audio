@@ -14,10 +14,9 @@
 # decoded Buffer (audio.stream) satisfies this; anything that can page-fault,
 # wait on a mutex, or call the allocator does not.
 #
-# LINKING. a program that opens a device links the compiled shim object and the
-# platform audio libraries. those requirements are declared in this project's
-# mach.toml (`[bin.play] libs` for the shim object, `[os.<name>] libs` for the
-# system libraries) and cascade to consumers; the pure-mach layer links nothing.
+# LINKING. a program that opens a device inherits the vendored shim build, local
+# runtime archives, and target-filtered system/framework links from mach.toml.
+# those requirements cascade to consumers; the pure-mach layer links nothing.
 
 use std.types.result.Result;
 use std.types.result.ok;
@@ -39,28 +38,24 @@ use buffer: audio.buffer;
 pub def RenderFn: fun(*f32, u32, u32, ptr);
 
 # open an f32 playback device; returns an opaque handle or nil on failure
-#[symbol("mad_device_open")]
 ext fun mad_device_open(sample_rate: u32, channels: u32, render: RenderFn, user: ptr) ptr;
 
 # start the device's audio thread; 0 on success
-#[symbol("mad_device_start")]
 ext fun mad_device_start(dev: ptr) i32;
 
 # stop the device's audio thread; 0 on success
-#[symbol("mad_device_stop")]
 ext fun mad_device_stop(dev: ptr) i32;
 
 # stop and release the device and its handle
-#[symbol("mad_device_close")]
 ext fun mad_device_close(dev: ptr);
 
 # the active sample rate the callback is fed
-#[symbol("mad_device_sample_rate")]
 ext fun mad_device_sample_rate(dev: ptr) u32;
 
 # the active channel count the callback is fed
-#[symbol("mad_device_channels")]
 ext fun mad_device_channels(dev: ptr) u32;
+
+ext fun mad_device_probe_null() i32;
 
 # an open playback device driven by a render callback
 # ---
@@ -79,7 +74,8 @@ pub rec Device {
 # format: requested rate and channel layout; channels must be >= 1
 # render: callback invoked on the audio thread to fill output (see RenderFn)
 # user:   opaque pointer handed back to every render call
-# ret:    an open Device, or an error if the format is invalid or the backend fails
+# ret:    an open Device, or an error if the format is invalid, no real backend
+#         is available, or the selected backend fails
 pub fun open(format: buffer.Format, render: RenderFn, user: ptr) Result[Device, str] {
     if (format.channels == 0) { ret err[Device, str]("format requires at least one channel"); }
     if (render == nil) { ret err[Device, str]("render callback is nil"); }
@@ -141,4 +137,9 @@ pub fun sample_rate(dev: Device) u32 {
 pub fun channels(dev: Device) u16 {
     if (dev.handle == nil) { ret 0; }
     ret mad_device_channels(dev.handle)::u16;
+}
+
+test "device: native shim runs the null backend lifecycle" {
+    if (mad_device_probe_null() != 0) { ret 1; }
+    ret 0;
 }
