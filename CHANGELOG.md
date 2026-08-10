@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - device: Reject the null backend from normal playback so a missing hardware backend cannot report false success.
+- build: Require Mach 4.18.1 or newer for the native foreign-object link path.
 - windows: Remove the unused `ole32.dll` link; miniaudio loads it at runtime for WASAPI.
 
 ## [0.4.1] - 2026-08-09

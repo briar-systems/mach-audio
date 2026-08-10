@@ -131,7 +131,7 @@ run`) compiles the vendored translation unit and links it in one pass — there 
 no separate shim build and no `-L` flag. A consumer that pulls mach-audio
 inherits the step and the platform libs automatically and builds the vendored
 object the same way; `mach` cannot compile the C for them. The pure-Mach modules
-never call into the shim.
+never call into the shim. The native link path requires Mach 4.18.1 or newer.
 
 [`tools/build-miniaudio.sh`](tools/build-miniaudio.sh) selects only the intended
 backend family plus the null backend used by the lifecycle probe. Linux builds
@@ -146,6 +146,9 @@ Darwin builds are native-only: the Apple SDK framework headers are not
 redistributable and do not ship with Zig. The shim defines
 `MA_NO_RUNTIME_LINKING`, so CoreFoundation, CoreAudio, and AudioToolbox are
 normal framework dependencies rather than notarization-hostile `dlopen` calls.
+Until Mach supports paired `SUBTRACTOR` relocations and common symbols from
+foreign Mach-O objects (mach#2973 and mach#2974), the Darwin shim uses
+`-fno-jump-tables -fno-common`; both flags preserve the miniaudio behavior.
 Linux continues to load its audio servers at run time and links only the C
 runtime, threads, math, and dynamic-loader surface.
 
@@ -182,3 +185,7 @@ The null probe verifies native ABI and lifecycle behavior, not sound. Audible
 playback remains a manual hardware check using `play`; the exact steps and the
 current evidence ledger live in
 [`doc/device-validation.md`](doc/device-validation.md).
+
+The external fixture intentionally owns its dependency lock instead of
+inheriting the repository lock. This makes it exercise the exported native
+build and link cascade from an independent consumer graph.
