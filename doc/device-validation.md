@@ -14,11 +14,13 @@ Use a short, known-good PCM WAV and test both profiles on the physical machine:
 
 ```sh
 mach dep pull
-mach build . --profile debug --bin play
-mach build . --profile release --bin play
+mach build . --profile debug
+mach build . --profile release
 ./out/<target>/debug/bin/play sample.wav
 ./out/<target>/release/bin/play sample.wav
 ```
+
+On Windows, the executable path is `bin/play.exe`.
 
 For each run:
 

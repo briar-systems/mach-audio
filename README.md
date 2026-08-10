@@ -108,7 +108,8 @@ renders synchronously and allocation-free, so a buffer-and-producer-thread
 would only add latency.
 
 The full decode-to-speakers path lives in [`src/play.mach`](src/play.mach); run
-it with `mach run . --bin play -- some.wav`.
+it with `mach run . --bin play -- some.wav`. On Windows, use the platform's
+extension-specific artifact: `mach run . --bin play-windows -- some.wav`.
 
 Normal playback refuses miniaudio's null backend. A successful `audio.open` or
 `play` run therefore means that a real platform backend initialized; a machine
@@ -162,7 +163,7 @@ hosted null-device run is never presented as a physical speaker test.
 
 | Target | ISA | Device backend | Automated validation | Physical hardware |
 |---|---|---|---|---|
-| linux | x86_64 | ALSA / PulseAudio / JACK | native build, 37 tests, external lifecycle probe | default PipeWire output opened/started/stopped in debug and release; audible result not independently asserted |
+| linux | x86_64 | ALSA / PulseAudio / JACK | native build, 45 tests, external lifecycle probe | default PipeWire output opened/started/stopped in debug and release; audible result not independently asserted |
 | windows | x86_64 | WASAPI | Linux cross-link, exact PE inspection, Wine WASAPI run, native external lifecycle probe | pending |
 | darwin | x86_64 | CoreAudio | native Intel build and external lifecycle probe | pending |
 

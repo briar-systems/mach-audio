@@ -46,7 +46,20 @@ need    = []
 kind    = "bin"
 entry   = "play.mach"
 out     = "bin/play"
-targets = ["*"]
+targets = ["linux-x86_64", "darwin"]
+link    = [
+    "miniaudio-local", "mingw32", "compiler-rt",
+    "pthread", "m", "dl", "rt",
+    "kernel32", "ucrt-heap", "ucrt-string", "ucrt-stdio",
+    "libSystem", "CoreFoundation", "CoreAudio", "AudioToolbox",
+]
+need    = []
+
+[artifact.play-windows]
+kind    = "bin"
+entry   = "play.mach"
+out     = "bin/play.exe"
+targets = ["windows"]
 link    = [
     "miniaudio-local", "mingw32", "compiler-rt",
     "pthread", "m", "dl", "rt",
@@ -159,13 +172,18 @@ source = "system"
 name   = "/usr/lib/libSystem.B.dylib"
 library = "/usr/lib/libSystem.B.dylib"
 symbols = [
-    "___stack_chk_fail", "___stack_chk_guard", "_clock_gettime",
-    "_exp", "_free", "_mach_absolute_time", "_malloc", "_memcpy",
-    "_memset", "_pthread_cond_broadcast", "_pthread_cond_destroy",
-    "_pthread_cond_init", "_pthread_cond_signal", "_pthread_cond_wait",
-    "_pthread_create", "_pthread_join", "_pthread_mutex_destroy",
-    "_pthread_mutex_init", "_pthread_mutex_lock", "_pthread_mutex_unlock",
-    "_realloc", "_sin", "_strlen", "_usleep", "_vsnprintf",
+    "___chkstk_darwin", "__assert_rtn", "__bzero", "__stack_chk_fail",
+    "__stack_chk_guard", "clock_gettime", "exp", "free", "gettimeofday",
+    "mach_absolute_time", "malloc", "memcpy", "memset",
+    "pthread_attr_destroy", "pthread_attr_getschedparam", "pthread_attr_init",
+    "pthread_attr_setinheritsched", "pthread_attr_setschedparam",
+    "pthread_attr_setschedpolicy", "pthread_attr_setstacksize",
+    "pthread_cond_broadcast", "pthread_cond_destroy", "pthread_cond_init",
+    "pthread_cond_signal", "pthread_cond_wait", "pthread_create",
+    "pthread_join", "pthread_mutex_destroy", "pthread_mutex_init",
+    "pthread_mutex_lock", "pthread_mutex_unlock", "realloc",
+    "sched_get_priority_max", "sched_get_priority_min", "select$1050", "sin",
+    "strcmp", "strlen", "usleep", "vsnprintf",
 ]
 os     = ["darwin"]
 isa    = "*"
@@ -175,7 +193,7 @@ export = true
 [link.CoreFoundation]
 source = "framework"
 name   = "CoreFoundation"
-symbols = ["_CFRelease", "_CFStringGetCString"]
+symbols = ["CFRelease", "CFStringGetCString"]
 os     = ["darwin"]
 isa    = "*"
 abi    = "*"
@@ -185,9 +203,9 @@ export = true
 source = "framework"
 name   = "CoreAudio"
 symbols = [
-    "_AudioObjectAddPropertyListener", "_AudioObjectGetPropertyData",
-    "_AudioObjectGetPropertyDataSize", "_AudioObjectRemovePropertyListener",
-    "_AudioObjectSetPropertyData",
+    "AudioObjectAddPropertyListener", "AudioObjectGetPropertyData",
+    "AudioObjectGetPropertyDataSize", "AudioObjectRemovePropertyListener",
+    "AudioObjectSetPropertyData",
 ]
 os     = ["darwin"]
 isa    = "*"
@@ -198,11 +216,11 @@ export = true
 source = "framework"
 name   = "AudioToolbox"
 symbols = [
-    "_AudioComponentFindNext", "_AudioComponentInstanceDispose",
-    "_AudioComponentInstanceNew", "_AudioOutputUnitStart",
-    "_AudioOutputUnitStop", "_AudioUnitAddPropertyListener",
-    "_AudioUnitGetProperty", "_AudioUnitGetPropertyInfo",
-    "_AudioUnitInitialize", "_AudioUnitRender", "_AudioUnitSetProperty",
+    "AudioComponentFindNext", "AudioComponentInstanceDispose",
+    "AudioComponentInstanceNew", "AudioOutputUnitStart", "AudioOutputUnitStop",
+    "AudioUnitAddPropertyListener", "AudioUnitGetProperty",
+    "AudioUnitGetPropertyInfo", "AudioUnitInitialize", "AudioUnitRender",
+    "AudioUnitSetProperty",
 ]
 os     = ["darwin"]
 isa    = "*"

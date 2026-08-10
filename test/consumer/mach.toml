@@ -33,7 +33,15 @@ simd = "scalarize"
 kind = "bin"
 entry = "main.mach"
 out = "bin/audio-consumer"
-targets = ["*"]
+targets = ["linux-x86_64", "darwin"]
+link = []
+need = []
+
+[artifact.audio-consumer-windows]
+kind = "bin"
+entry = "main.mach"
+out = "bin/audio-consumer.exe"
+targets = ["windows"]
 link = []
 need = []
 
