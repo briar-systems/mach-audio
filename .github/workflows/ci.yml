@@ -9,7 +9,6 @@ permissions:
   contents: read
 
 env:
-  MACH_REF: 91ea708fbd1623bccf17aa41b9f50fb7519e8e71
   ZIG_VERSION: "0.16.0"
 
 jobs:
@@ -19,7 +18,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Build current Mach
+      - name: Install released Mach
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -29,15 +28,8 @@ jobs:
             -p 'mach-*-x86_64-linux.tar.gz' -D "$RUNNER_TEMP/mach-release" --clobber
           tar -xzf "$RUNNER_TEMP"/mach-release/mach-*-x86_64-linux.tar.gz \
             -C "$RUNNER_TEMP/mach-release"
-          install -m 0755 "$RUNNER_TEMP/mach-release/mach" "$RUNNER_TEMP/bootstrap-mach"
-          git init "$RUNNER_TEMP/mach-src"
-          git -C "$RUNNER_TEMP/mach-src" remote add origin https://github.com/briar-systems/mach.git
-          git -C "$RUNNER_TEMP/mach-src" fetch --depth 1 origin "$MACH_REF"
-          git -C "$RUNNER_TEMP/mach-src" checkout --detach FETCH_HEAD
-          cd "$RUNNER_TEMP/mach-src"
-          "$RUNNER_TEMP/bootstrap-mach" dep pull
-          "$RUNNER_TEMP/bootstrap-mach" build . --profile release -o current-mach
-          install -m 0755 current-mach "$RUNNER_TEMP/bin/mach"
+          install -m 0755 "$RUNNER_TEMP/mach-release/mach" "$RUNNER_TEMP/bin/mach"
+          "$RUNNER_TEMP/bin/mach" info
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
 
       - name: Build and test native shim
@@ -80,7 +72,7 @@ jobs:
             | tar -xJ -C "$RUNNER_TEMP"
           echo "$RUNNER_TEMP/zig-x86_64-linux-$ZIG_VERSION" >> "$GITHUB_PATH"
 
-      - name: Build current Mach
+      - name: Install released Mach
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -90,15 +82,8 @@ jobs:
             -p 'mach-*-x86_64-linux.tar.gz' -D "$RUNNER_TEMP/mach-release" --clobber
           tar -xzf "$RUNNER_TEMP"/mach-release/mach-*-x86_64-linux.tar.gz \
             -C "$RUNNER_TEMP/mach-release"
-          install -m 0755 "$RUNNER_TEMP/mach-release/mach" "$RUNNER_TEMP/bootstrap-mach"
-          git init "$RUNNER_TEMP/mach-src"
-          git -C "$RUNNER_TEMP/mach-src" remote add origin https://github.com/briar-systems/mach.git
-          git -C "$RUNNER_TEMP/mach-src" fetch --depth 1 origin "$MACH_REF"
-          git -C "$RUNNER_TEMP/mach-src" checkout --detach FETCH_HEAD
-          cd "$RUNNER_TEMP/mach-src"
-          "$RUNNER_TEMP/bootstrap-mach" dep pull
-          "$RUNNER_TEMP/bootstrap-mach" build . --profile release -o current-mach
-          install -m 0755 current-mach "$RUNNER_TEMP/bin/mach"
+          install -m 0755 "$RUNNER_TEMP/mach-release/mach" "$RUNNER_TEMP/bin/mach"
+          "$RUNNER_TEMP/bin/mach" info
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
 
       - name: Build Windows artifacts
@@ -120,8 +105,8 @@ jobs:
           for profile in debug release; do
             tools/check-windows-pe.sh \
               "out/windows/$profile/obj/miniaudio/miniaudio.o" \
-              "out/windows/$profile/bin/play" \
-              "test/consumer/out/windows/$profile/bin/audio-consumer"
+              "out/windows/$profile/bin/play.exe" \
+              "test/consumer/out/windows/$profile/bin/audio-consumer.exe"
           done
 
   windows-native:
@@ -144,31 +129,22 @@ jobs:
           $zig = Get-ChildItem -Path $root -Directory | Select-Object -First 1
           Add-Content -Path $env:GITHUB_PATH -Value $zig.FullName
 
-      - name: Build current Mach
+      - name: Install released Mach
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           $ErrorActionPreference = 'Stop'
           $PSNativeCommandUseErrorActionPreference = $true
           $seed = Join-Path $env:RUNNER_TEMP 'mach-release'
-          $src = Join-Path $env:RUNNER_TEMP 'mach-src'
           $bin = Join-Path $env:RUNNER_TEMP 'bin'
-          New-Item -ItemType Directory -Path $seed, $src, $bin -Force | Out-Null
+          New-Item -ItemType Directory -Path $seed, $bin -Force | Out-Null
           gh release download -R briar-systems/mach -p 'mach-*-x86_64-windows.zip' -D $seed --clobber
           $zip = Get-ChildItem -Path $seed -Filter 'mach-*-x86_64-windows.zip' | Select-Object -First 1
           Expand-Archive -Path $zip.FullName -DestinationPath $seed -Force
-          $bootstrap = Get-ChildItem -Path $seed -Filter 'mach.exe' -Recurse | Select-Object -First 1
-          git -C $src init
-          git -C $src remote add origin https://github.com/briar-systems/mach.git
-          git -C $src fetch --depth 1 origin $env:MACH_REF
-          git -C $src checkout --detach FETCH_HEAD
-          Push-Location $src
-          & $bootstrap.FullName dep pull
+          $mach = Get-ChildItem -Path $seed -Filter 'mach.exe' -Recurse | Select-Object -First 1
+          Copy-Item $mach.FullName (Join-Path $bin 'mach.exe') -Force
+          & (Join-Path $bin 'mach.exe') info
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          & $bootstrap.FullName build . --profile release -o current-mach.exe
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          Copy-Item current-mach.exe (Join-Path $bin 'mach.exe') -Force
-          Pop-Location
           Add-Content -Path $env:GITHUB_PATH -Value $bin
 
       - name: Build and run native probe
@@ -178,12 +154,13 @@ jobs:
           mach.exe dep pull
           for profile in debug release; do
             mach.exe build . --target windows --profile "$profile"
+            mach.exe test . --target windows --profile "$profile"
           done
           cd test/consumer
           mach.exe dep pull
           for profile in debug release; do
             mach.exe build . --target windows --profile "$profile"
-            exe="out/windows/$profile/bin/audio-consumer"
+            exe="out/windows/$profile/bin/audio-consumer.exe"
             "$exe" | tee "$RUNNER_TEMP/audio-consumer-native-$profile.log"
             grep -q '^consumer smoke ok$' "$RUNNER_TEMP/audio-consumer-native-$profile.log"
           done
@@ -195,8 +172,8 @@ jobs:
           for profile in debug release; do
             tools/check-windows-pe.sh \
               "out/windows/$profile/obj/miniaudio/miniaudio.o" \
-              "out/windows/$profile/bin/play" \
-              "test/consumer/out/windows/$profile/bin/audio-consumer"
+              "out/windows/$profile/bin/play.exe" \
+              "test/consumer/out/windows/$profile/bin/audio-consumer.exe"
           done
 
   darwin:
@@ -205,7 +182,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Build current Mach
+      - name: Install released Mach
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -215,15 +192,8 @@ jobs:
             -p 'mach-*-x86_64-darwin.tar.gz' -D "$RUNNER_TEMP/mach-release" --clobber
           tar -xzf "$RUNNER_TEMP"/mach-release/mach-*-x86_64-darwin.tar.gz \
             -C "$RUNNER_TEMP/mach-release"
-          install -m 0755 "$RUNNER_TEMP/mach-release/mach" "$RUNNER_TEMP/bootstrap-mach"
-          git init "$RUNNER_TEMP/mach-src"
-          git -C "$RUNNER_TEMP/mach-src" remote add origin https://github.com/briar-systems/mach.git
-          git -C "$RUNNER_TEMP/mach-src" fetch --depth 1 origin "$MACH_REF"
-          git -C "$RUNNER_TEMP/mach-src" checkout --detach FETCH_HEAD
-          cd "$RUNNER_TEMP/mach-src"
-          "$RUNNER_TEMP/bootstrap-mach" dep pull
-          "$RUNNER_TEMP/bootstrap-mach" build . --profile release -o current-mach
-          install -m 0755 current-mach "$RUNNER_TEMP/bin/mach"
+          install -m 0755 "$RUNNER_TEMP/mach-release/mach" "$RUNNER_TEMP/bin/mach"
+          "$RUNNER_TEMP/bin/mach" info
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
 
       - name: Build and test CoreAudio shim
@@ -231,12 +201,8 @@ jobs:
           set -euo pipefail
           mach dep pull
           for profile in debug release; do
-            if ! mach build . --target darwin --profile "$profile"; then
-              nm -u "out/darwin/$profile/obj/miniaudio/miniaudio.o" || true
-              exit 1
-            fi
+            mach build . --target darwin --profile "$profile"
             mach test . --target darwin --profile "$profile"
-            nm -u "out/darwin/$profile/obj/miniaudio/miniaudio.o"
           done
 
       - name: Verify external consumer
@@ -249,5 +215,14 @@ jobs:
             exe="out/darwin/$profile/bin/audio-consumer"
             "$exe" | tee "$RUNNER_TEMP/audio-consumer-darwin-$profile.log"
             grep -q '^consumer smoke ok$' "$RUNNER_TEMP/audio-consumer-darwin-$profile.log"
-            otool -L "$exe"
+          done
+
+      - name: Verify exact Mach-O imports
+        run: |
+          set -euo pipefail
+          for profile in debug release; do
+            tools/check-darwin-macho.sh \
+              "out/darwin/$profile/obj/miniaudio/miniaudio.o" \
+              "out/darwin/$profile/bin/play" \
+              "test/consumer/out/darwin/$profile/bin/audio-consumer"
           done

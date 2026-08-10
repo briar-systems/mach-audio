@@ -136,10 +136,11 @@ never call into the shim.
 [`tools/build-miniaudio.sh`](tools/build-miniaudio.sh) selects only the intended
 backend family plus the null backend used by the lifecycle probe. Linux builds
 with the host `cc`. Windows builds with `zig cc` for the GNU ABI and materialize
-Zig's target-matched MinGW/compiler runtime archives; the manifest attributes
-the shim's measured kernel32 and UCRT imports to their exact DLLs. `ole32.dll`
-is deliberately absent from the PE import table because miniaudio loads it with
-`LoadLibraryA` when WASAPI initializes.
+Zig's target-matched MinGW/compiler runtime archives. Windows builds therefore
+require Zig 0.16 and Bash on `PATH`. The manifest attributes the shim's measured
+kernel32 and UCRT imports to their exact DLLs. `ole32.dll` is deliberately absent
+from the PE import table because miniaudio loads it with `LoadLibraryA` when
+WASAPI initializes.
 
 Darwin builds are native-only: the Apple SDK framework headers are not
 redistributable and do not ship with Zig. The shim defines
@@ -164,8 +165,8 @@ hosted null-device run is never presented as a physical speaker test.
 | Target | ISA | Device backend | Automated validation | Physical hardware |
 |---|---|---|---|---|
 | linux | x86_64 | ALSA / PulseAudio / JACK | native build, 45 tests, external lifecycle probe | default PipeWire output opened/started/stopped in debug and release; audible result not independently asserted |
-| windows | x86_64 | WASAPI | Linux cross-link, exact PE inspection, Wine WASAPI run, native external lifecycle probe | pending |
-| darwin | x86_64 | CoreAudio | native Intel build and external lifecycle probe | pending |
+| windows | x86_64 | WASAPI | Linux cross-link, 45 native tests, exact PE inspection, Wine WASAPI run, external lifecycle probe | pending |
+| darwin | x86_64 | CoreAudio | native Intel build, 45 tests, exact Mach-O inspection, external lifecycle probe | pending |
 
 ## Tests
 
