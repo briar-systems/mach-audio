@@ -170,7 +170,7 @@ export = true
 [link.libSystem]
 source = "system"
 name   = "/usr/lib/libSystem.B.dylib"
-library = "/usr/lib/libSystem.B.dylib"
+library = "libSystem"
 symbols = [
     "___chkstk_darwin", "__assert_rtn", "__bzero", "__stack_chk_fail",
     "__stack_chk_guard", "clock_gettime", "exp", "free", "gettimeofday",
