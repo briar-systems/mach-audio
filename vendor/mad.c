@@ -60,14 +60,27 @@ static void mad__data_callback(ma_device *pDevice, void *pOutput, const void *pI
     }
 }
 
+/* returned by mad_device_open when only the null backend could be opened. it is
+ * positive so it can never collide with a negative ma_result. */
+#define MAD_NULL_BACKEND 1
+
 /* open an f32 playback device at the given rate and channel count, driven by
- * `render`. returns an opaque handle, or NULL on allocation or backend failure.
- * a rate or channel count of 0 asks the backend for its native value. */
-void *mad_device_open(unsigned int sample_rate, unsigned int channels, mad_render_fn render, void *user)
+ * `render`, and store its opaque handle in *out. returns MA_SUCCESS, a negative
+ * ma_result on allocation or backend failure, or MAD_NULL_BACKEND when no real
+ * backend is available. *out is NULL on any failure. a rate or channel count of
+ * 0 asks the backend for its native value. */
+int mad_device_open(unsigned int sample_rate, unsigned int channels, mad_render_fn render, void *user, void **out)
 {
+    ma_result result;
+
+    if (out == NULL) {
+        return MA_INVALID_ARGS;
+    }
+    *out = NULL;
+
     mad_device *d = (mad_device *)malloc(sizeof(*d));
     if (d == NULL) {
-        return NULL;
+        return MA_OUT_OF_MEMORY;
     }
     d->render = render;
     d->user   = user;
@@ -79,16 +92,18 @@ void *mad_device_open(unsigned int sample_rate, unsigned int channels, mad_rende
     config.dataCallback      = mad__data_callback;
     config.pUserData         = d;
 
-    if (ma_device_init(NULL, &config, &d->device) != MA_SUCCESS) {
+    result = ma_device_init(NULL, &config, &d->device);
+    if (result != MA_SUCCESS) {
         free(d);
-        return NULL;
+        return (int)result;
     }
     if (ma_device_get_context(&d->device)->backend == ma_backend_null) {
         ma_device_uninit(&d->device);
         free(d);
-        return NULL;
+        return MAD_NULL_BACKEND;
     }
-    return d;
+    *out = d;
+    return MA_SUCCESS;
 }
 
 /* begin pulling from the render hook. returns 0 on success, non-zero otherwise. */
