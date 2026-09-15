@@ -11,8 +11,6 @@ permissions:
 env:
   MACH_VERSION: "v5.0.4"
   ZIG_VERSION: "0.16.0"
-  # the windows target registers no debug model, so a debug-info profile is refused there
-  WINDOWS_PROFILES: "release"
 
 jobs:
   linux:
@@ -93,19 +91,19 @@ jobs:
         run: |
           set -euo pipefail
           mach dep pull .
-          for profile in $WINDOWS_PROFILES; do
+          for profile in debug release; do
             mach build . --target windows --profile "$profile"
           done
           cd test/consumer
           mach dep pull .
-          for profile in $WINDOWS_PROFILES; do
+          for profile in debug release; do
             mach build . --target windows --profile "$profile"
           done
 
       - name: Verify exact PE imports and relocations
         run: |
           set -euo pipefail
-          for profile in $WINDOWS_PROFILES; do
+          for profile in debug release; do
             tools/check-windows-pe.sh \
               "out/windows/$profile/vendor/miniaudio/miniaudio.o" \
               "out/windows/$profile/bin/play.exe" \
@@ -155,13 +153,13 @@ jobs:
         run: |
           set -euo pipefail
           mach.exe dep pull .
-          for profile in $WINDOWS_PROFILES; do
+          for profile in debug release; do
             mach.exe build . --target windows --profile "$profile"
             mach.exe test . --target windows --profile "$profile"
           done
           cd test/consumer
           mach.exe dep pull .
-          for profile in $WINDOWS_PROFILES; do
+          for profile in debug release; do
             mach.exe build . --target windows --profile "$profile"
             exe="out/windows/$profile/bin/audio-consumer.exe"
             "$exe" | tee "$RUNNER_TEMP/audio-consumer-native-$profile.log"
@@ -172,7 +170,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for profile in $WINDOWS_PROFILES; do
+          for profile in debug release; do
             tools/check-windows-pe.sh \
               "out/windows/$profile/vendor/miniaudio/miniaudio.o" \
               "out/windows/$profile/bin/play.exe" \

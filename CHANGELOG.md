@@ -21,8 +21,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `err[DeviceError]`, and `close` returns nothing. `DeviceError` separates a
   missing real backend (`unavailable`) from a backend refusal (`backend`, with
   miniaudio's result code), which the shim's `mad_device_open` now reports.
-- windows: The target registers no debug-info model under Mach 5, so Windows
-  builds and CI use the release profile only.
 - play: Read the input through `std.filesystem.read_bytes` (#19).
 
 ## [0.5.0] - 2026-08-09

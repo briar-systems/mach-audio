@@ -20,8 +20,7 @@ mach build . --profile release
 ./out/<target>/release/bin/play sample.wav
 ```
 
-On Windows, the executable path is `bin/play.exe`, and only the release profile
-builds because Mach registers no debug-info model for that target.
+On Windows, the executable path is `bin/play.exe`.
 
 For each run:
 
