@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+- build: Require Mach 5.0 and std 2.1. The dependency is `[dep.std]`, pinned by
+  the committed `dep/std` gitlink, and `mach.lock` is gone. Consumers declare
+  this project as `[dep.audio]`.
+- build: The vendored shim and MinGW runtime now build under
+  `{project.out}/vendor/miniaudio/`, clear of the compiler's reserved object tree.
+- buffer: `init` returns `res[Buffer, BufferError]` (`channels`, `overflow`,
+  `alloc`), `dnit` returns `err[allocator.Error]`, and `at` returns `opt[*f32]`.
+- wav: `decode` returns `res[Buffer, DecodeError]`, one case per rejection,
+  carrying the offending channel count, format tag or bit depth.
+- device: `open` returns `res[Device, DeviceError]`, `start` and `stop` return
+  `err[DeviceError]`, and `close` returns nothing. `DeviceError` separates a
+  missing real backend (`unavailable`) from a backend refusal (`backend`, with
+  miniaudio's result code), which the shim's `mad_device_open` now reports.
+- windows: The target registers no debug-info model under Mach 5, so Windows
+  builds and CI use the release profile only.
+- play: Read the input through `std.filesystem.read_bytes` (#19).
+
 ## [0.5.0] - 2026-08-09
 
 ### Added

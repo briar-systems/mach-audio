@@ -18,7 +18,7 @@ fun master(a: f32, b: f32, trim: f32) f32 {
 Consuming projects vendor mach-audio as a normal Mach dependency:
 
 ```toml
-[dep.mach-audio]
+[dep.audio]
 git = "https://github.com/briar-systems/mach-audio"
 ref = "branch/main"
 ```
@@ -96,7 +96,12 @@ fun render(out: *f32, frames: u32, channels: u32, user: ptr) {
 }
 
 # ... on the main thread: decode -> mix -> open -> start
-val dev: audio.Device = /* audio.open(fmt, render, (?stream):~ptr) */ ...;
+val opened: res[audio.Device, audio.DeviceError] = audio.open(fmt, render, (?stream):~ptr);
+if (sel opened.err) {
+    # opened.err is unavailable, channels, render, or backend with miniaudio's code
+    ret 1;
+}
+var dev: audio.Device = opened.ok;
 ```
 
 **Real-time contract.** The render callback runs on the audio thread and must
@@ -113,8 +118,8 @@ extension-specific artifact: `mach run . --bin play-windows -- some.wav`.
 
 Normal playback refuses miniaudio's null backend. A successful `audio.open` or
 `play` run therefore means that a real platform backend initialized; a machine
-with no usable output device reports an open failure instead of silently
-discarding samples.
+with no usable output device reports `DeviceError.unavailable` instead of
+silently discarding samples.
 
 ## Native dependency and linking
 
@@ -131,13 +136,13 @@ run`) compiles the vendored translation unit and links it in one pass — there 
 no separate shim build and no `-L` flag. A consumer that pulls mach-audio
 inherits the step and the platform libs automatically and builds the vendored
 object the same way; `mach` cannot compile the C for them. The pure-Mach modules
-never call into the shim. The native link path requires Mach 4.18.1 or newer.
+never call into the shim. mach-audio requires Mach 5.0 and std 2.1.
 
 [`tools/build-miniaudio.sh`](tools/build-miniaudio.sh) selects only the intended
 backend family plus the null backend used by the lifecycle probe. Linux builds
 with the host `cc`. Windows builds with `zig cc` for the GNU ABI and materialize
 Zig's target-matched MinGW/compiler runtime archives. Windows builds therefore
-require Zig 0.16 and Bash on `PATH`. The manifest attributes the shim's measured
+require Zig 0.16 and a POSIX `sh` on `PATH`. The manifest attributes the shim's measured
 kernel32 and UCRT imports to their exact DLLs. `ole32.dll` is deliberately absent
 from the PE import table because miniaudio loads it with `LoadLibraryA` when
 WASAPI initializes.
@@ -167,9 +172,9 @@ hosted null-device run is never presented as a physical speaker test.
 
 | Target | ISA | Device backend | Automated validation | Physical hardware |
 |---|---|---|---|---|
-| linux | x86_64 | ALSA / PulseAudio / JACK | native build, 45 tests, external lifecycle probe | default PipeWire output opened/started/stopped in debug and release; audible result not independently asserted |
-| windows | x86_64 | WASAPI | Linux cross-link, 45 native tests, exact PE inspection, external lifecycle probe | pending |
-| darwin | x86_64 | CoreAudio | native Intel build, 45 tests, exact Mach-O inspection, external lifecycle probe | pending |
+| linux | x86_64 | ALSA / PulseAudio / JACK | native build, 49 tests, external lifecycle probe | default PipeWire output opened/started/stopped in debug and release; audible result not independently asserted |
+| windows | x86_64 | WASAPI | Linux cross-link, 49 native tests, exact PE inspection, external lifecycle probe (release profile only, the target has no debug-info model) | pending |
+| darwin | x86_64 | CoreAudio | native Intel build, 49 tests, exact Mach-O inspection, external lifecycle probe | pending |
 
 ## Tests
 
@@ -186,6 +191,7 @@ playback remains a manual hardware check using `play`; the exact steps and the
 current evidence ledger live in
 [`doc/device-validation.md`](doc/device-validation.md).
 
-The external fixture intentionally owns its dependency lock instead of
-inheriting the repository lock. This makes it exercise the exported native
-build and link cascade from an independent consumer graph.
+The external fixture is its own root: `mach dep pull test/consumer` realizes a
+flat `dep/` holding a copy of this project and the std it selects, rather than
+sharing the repository's `dep/std` gitlink. This makes it exercise the exported
+native build and link cascade from an independent consumer graph.

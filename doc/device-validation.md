@@ -13,14 +13,15 @@ proves that one of the real backends compiled for that target initialized.
 Use a short, known-good PCM WAV and test both profiles on the physical machine:
 
 ```sh
-mach dep pull
+mach dep pull .
 mach build . --profile debug
 mach build . --profile release
 ./out/<target>/debug/bin/play sample.wav
 ./out/<target>/release/bin/play sample.wav
 ```
 
-On Windows, the executable path is `bin/play.exe`.
+On Windows, the executable path is `bin/play.exe`, and only the release profile
+builds because Mach registers no debug-info model for that target.
 
 For each run:
 
