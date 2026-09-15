@@ -11,9 +11,9 @@ use std.types.size.usize;
 use std.types.bool.bool;
 use std.types.bool.true;
 use std.types.bool.false;
-use std.types.string.str;
+use std.types.error.err;
+use std.types.result.res;
 
-use R:    std.types.result;
 use allo: std.allocator;
 use page: std.allocator.page;
 use buffer: audio.buffer;
@@ -274,13 +274,16 @@ test "stream: stream_over borrows the buffer at frame zero" {
     fmt.sample_rate = 48000;
     fmt.channels    = 2;
 
-    var buf: buffer.Buffer = R.unwrap_ok[buffer.Buffer, str](buffer.init(?a, fmt, 3));
+    val made: res[buffer.Buffer, buffer.BufferError] = buffer.init(?a, fmt, 3);
+    if (sel made.err) { ret 1; }
+    var buf: buffer.Buffer = made.ok;
     var s: Stream = stream_over(?buf, false);
     if (s.samples != buf.samples) { ret 1; }
     if (s.frames != 3 || s.channels != 2 || s.cursor != 0) { ret 1; }
     if (s.looping) { ret 1; }
 
-    if (!buffer.dnit(?buf)) { ret 1; }
+    val released: err[allo.Error] = buffer.dnit(?buf);
+    if (sel released.err) { ret 1; }
     ret 0;
 }
 
