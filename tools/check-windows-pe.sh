@@ -43,7 +43,7 @@ vsnprintf
 wcslen
 EOF
 
-llvm-nm --undefined-only "$object" | awk '$1 == "U" { print $2 }' | sort -u \
+llvm-nm --undefined-only "$object" | awk '$1 == "U" { print $2 }' | LC_ALL=C sort -u \
     >"$tmp/actual-object-imports"
 if ! diff -u "$tmp/expected-object-imports" "$tmp/actual-object-imports"; then
     echo "check-windows-pe: miniaudio's measured import surface changed" >&2
@@ -65,11 +65,11 @@ grep -Eq ' [TW] vsnprintf$' "$tmp/mingw32" || {
 }
 
 cat >"$tmp/expected-dlls" <<'EOF'
-advapi32.dll
 api-ms-win-core-synch-l1-2-0.dll
 api-ms-win-crt-heap-l1-1-0.dll
 api-ms-win-crt-stdio-l1-1-0.dll
 api-ms-win-crt-string-l1-1-0.dll
+bcrypt.dll
 kernel32.dll
 ws2_32.dll
 EOF
@@ -79,7 +79,7 @@ for exe in "$@"; do
     relocs="$tmp/relocs"
     llvm-readobj --coff-imports "$exe" >"$imports"
     llvm-readobj --coff-basereloc "$exe" >"$relocs"
-    sed -n 's/^  Name: //p' "$imports" | sort -u >"$tmp/actual-dlls"
+    sed -n 's/^  Name: //p' "$imports" | LC_ALL=C sort -u >"$tmp/actual-dlls"
     if ! diff -u "$tmp/expected-dlls" "$tmp/actual-dlls"; then
         echo "check-windows-pe: unexpected import dependency set in $exe" >&2
         exit 1

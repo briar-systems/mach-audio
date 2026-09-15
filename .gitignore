@@ -1,7 +1,4 @@
 out/
 
-# compiled miniaudio shim (built from vendor/mad.c by the Makefile)
-build/
-
-# mach dep checkouts materialized by `mach dep pull`; mach.lock is the source of truth
-dep/
+# consumer dependencies realized by `mach dep pull test/consumer`
+test/consumer/dep/
