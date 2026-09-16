@@ -40,7 +40,7 @@ pub fun sum(a: f32, b: f32) f32 {
 # sample: input sample
 # ret:    the sample clamped to [-1.0, 1.0]
 pub fun clamp(sample: f32) f32 {
-    if (sample > 1.0) { ret 1.0; }
+    if (sample > 1.0)  { ret 1.0; }
     if (sample < -1.0) { ret -1.0; }
     ret sample;
 }
@@ -118,7 +118,7 @@ pub fun mix_add(dst: *f32, src: *f32, n: usize, gain: f32) {
 # left:     linear gain for channel 0
 # right:    linear gain for channel 1
 pub fun mix_add_pan(dst: *f32, src: *f32, frames: usize, channels: usize,
-                    left: f32, right: f32) {
+    left: f32, right: f32) {
     if (dst == nil || src == nil || channels == 0) { ret; }
 
     if (channels != 2) {
@@ -128,9 +128,9 @@ pub fun mix_add_pan(dst: *f32, src: *f32, frames: usize, channels: usize,
 
     var f: usize = 0;
     for (f < frames) {
-        dst[f * 2]     = dst[f * 2]     + src[f * 2]     * left;
+        dst[f * 2]     = dst[f * 2] + src[f * 2] * left;
         dst[f * 2 + 1] = dst[f * 2 + 1] + src[f * 2 + 1] * right;
-        f = f + 1;
+        f              = f + 1;
     }
 }
 
@@ -194,22 +194,22 @@ pub fun stereo_to_mono(dst: *f32, src: *f32, frames: usize) {
 }
 
 test "mix: gain, sum, and clamp" {
-    if (gain(0.5, 2.0) != 1.0) { ret 1; }
-    if (gain(0.5, unity) != 0.5) { ret 1; }
-    if (sum(0.25, 0.5) != 0.75) { ret 1; }
+    if (gain(0.5, 2.0) != 1.0)    { ret 1; }
+    if (gain(0.5, unity) != 0.5)  { ret 1; }
+    if (sum(0.25, 0.5) != 0.75)   { ret 1; }
     if (sum(silence, 0.3) != 0.3) { ret 1; }
-    if (clamp(1.5) != 1.0) { ret 1; }
-    if (clamp(-1.5) != -1.0) { ret 1; }
-    if (clamp(0.5) != 0.5) { ret 1; }
+    if (clamp(1.5) != 1.0)        { ret 1; }
+    if (clamp(-1.5) != -1.0)      { ret 1; }
+    if (clamp(0.5) != 0.5)        { ret 1; }
     ret 0;
 }
 
 test "mix: apply_gain scales a sample array in place" {
     var buf: [4]f32 = [4]f32{0.1, 0.25, 0.5, -0.5};
     apply_gain(?buf[0], 4, 2.0);
-    if (buf[0] != 0.2) { ret 1; }
-    if (buf[1] != 0.5) { ret 1; }
-    if (buf[2] != 1.0) { ret 1; }
+    if (buf[0] != 0.2)  { ret 1; }
+    if (buf[1] != 0.5)  { ret 1; }
+    if (buf[2] != 1.0)  { ret 1; }
     if (buf[3] != -1.0) { ret 1; }
     ret 0;
 }
@@ -217,9 +217,9 @@ test "mix: apply_gain scales a sample array in place" {
 test "mix: clamp_samples limits an array to full scale" {
     var buf: [4]f32 = [4]f32{1.5, -1.5, 0.5, -0.25};
     clamp_samples(?buf[0], 4);
-    if (buf[0] != 1.0) { ret 1; }
-    if (buf[1] != -1.0) { ret 1; }
-    if (buf[2] != 0.5) { ret 1; }
+    if (buf[0] != 1.0)   { ret 1; }
+    if (buf[1] != -1.0)  { ret 1; }
+    if (buf[2] != 0.5)   { ret 1; }
     if (buf[3] != -0.25) { ret 1; }
     ret 0;
 }
@@ -248,22 +248,22 @@ test "mix: mix sums sources with gain and clamps the bus" {
     mix(?dst[0], 4, ?srcs[0], 2);
 
     # 0.5+0.5=1.0; 0.5+0.25=0.75; 0.5+1.0=1.5 -> 1.0; -0.5-0.75=-1.25 -> -1.0
-    if (dst[0] != 1.0) { ret 1; }
+    if (dst[0] != 1.0)  { ret 1; }
     if (dst[1] != 0.75) { ret 1; }
-    if (dst[2] != 1.0) { ret 1; }
+    if (dst[2] != 1.0)  { ret 1; }
     if (dst[3] != -1.0) { ret 1; }
     ret 0;
 }
 
 test "mix: mix with a per-source gain attenuates" {
-    var a: [2]f32 = [2]f32{1.0, -1.0};
+    var a:    [2]f32 = [2]f32{1.0, -1.0};
     var srcs: [1]Source;
     srcs[0].samples = ?a[0];
     srcs[0].gain    = 0.25;
 
     var dst: [2]f32 = [2]f32{0.0, 0.0};
     mix(?dst[0], 2, ?srcs[0], 1);
-    if (dst[0] != 0.25) { ret 1; }
+    if (dst[0] != 0.25)  { ret 1; }
     if (dst[1] != -0.25) { ret 1; }
     ret 0;
 }
@@ -281,9 +281,9 @@ test "mix: mono_to_stereo duplicates each sample" {
     var src: [3]f32 = [3]f32{0.1, -0.2, 0.3};
     var dst: [6]f32;
     mono_to_stereo(?dst[0], ?src[0], 3);
-    if (dst[0] != 0.1 || dst[1] != 0.1) { ret 1; }
+    if (dst[0] != 0.1 || dst[1] != 0.1)   { ret 1; }
     if (dst[2] != -0.2 || dst[3] != -0.2) { ret 1; }
-    if (dst[4] != 0.3 || dst[5] != 0.3) { ret 1; }
+    if (dst[4] != 0.3 || dst[5] != 0.3)   { ret 1; }
     ret 0;
 }
 

@@ -21,7 +21,7 @@
 use std.types.error.err;
 use std.types.result.res;
 
-use buffer: audio.buffer;
+use audio.buffer;
 
 # a device render callback: fill out with frame_count interleaved f32 frames of
 # channels samples each, then return. invoked on the audio thread under the
@@ -91,12 +91,12 @@ pub rec Device {
 # ret:    an open Device, or why none could be opened
 pub fun open(format: buffer.Format, render: RenderFn, user: ptr) res[Device, DeviceError] {
     if (format.channels == 0) { ret res[Device, DeviceError].err{DeviceError.channels{}}; }
-    if (render == nil) { ret res[Device, DeviceError].err{DeviceError.render{}}; }
+    if (render == nil)        { ret res[Device, DeviceError].err{DeviceError.render{}}; }
 
-    var h: ptr = nil;
+    var h:      ptr = nil;
     val status: i32 = mad_device_open(format.sample_rate, format.channels::u32, render, user, ?h);
     if (status == MAD_NULL_BACKEND) { ret res[Device, DeviceError].err{DeviceError.unavailable{}}; }
-    if (status != 0) { ret res[Device, DeviceError].err{DeviceError.backend{status}}; }
+    if (status != 0)                { ret res[Device, DeviceError].err{DeviceError.backend{status}}; }
 
     var d: Device;
     d.handle = h;

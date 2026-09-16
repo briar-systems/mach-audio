@@ -8,10 +8,10 @@
 use audio.buffer;
 # aliased so the flattened `mix` function does not collide with the module name.
 use mixer: audio.mix;
-use audio.resample;
-use audio.wav;
-use audio.stream;
 use audio.device;
+use audio.resample;
+use audio.stream;
+use audio.wav;
 # links the startup entrypoint so `mach test` over this library produces a binary.
 use std.runtime;
 
