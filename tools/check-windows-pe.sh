@@ -64,7 +64,9 @@ grep -Eq ' [TW] vsnprintf$' "$tmp/mingw32" || {
     exit 1
 }
 
+# advapi32 carries std's owner-only file DACLs
 cat >"$tmp/expected-dlls" <<'EOF'
+advapi32.dll
 api-ms-win-core-synch-l1-2-0.dll
 api-ms-win-crt-heap-l1-1-0.dll
 api-ms-win-crt-stdio-l1-1-0.dll
@@ -113,5 +115,5 @@ for exe in "$@"; do
         echo "check-windows-pe: unexpected base relocation type in $exe" >&2
         exit 1
     fi
-    echo "PASS $exe: 7 DLLs, $dir64 DIR64 relocations"
+    echo "PASS $exe: $(wc -l <"$tmp/expected-dlls") DLLs, $dir64 DIR64 relocations"
 done
