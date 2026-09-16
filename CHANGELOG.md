@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-09-16
+
 ### Changed
 - build: Require std 3.2. Windows binaries now also import `advapi32.dll`,
   which std uses to protect owner-only files (#31).
