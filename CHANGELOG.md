@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- build: Require std 3.2 (#31).
 - build: Require Mach 5.0 and std 2.1. The dependency is `[dep.std]`, pinned by
   the committed `dep/std` gitlink, and `mach.lock` is gone. Consumers declare
   this project as `[dep.audio]`.
