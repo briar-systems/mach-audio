@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 env:
-  MACH_VERSION: "v5.0.4"
+  MACH_VERSION: "v5.1.0"
   ZIG_VERSION: "0.16.0"
 
 jobs:
