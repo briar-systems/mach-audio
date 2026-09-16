@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 env:
-  MACH_VERSION: "v4.18.1"
+  MACH_VERSION: "v5.1.0"
   ZIG_VERSION: "0.16.0"
 
 jobs:
@@ -36,7 +36,7 @@ jobs:
       - name: Build and test native shim
         run: |
           set -euo pipefail
-          mach dep pull
+          mach dep pull .
           for profile in debug release; do
             mach build . --target linux-x86_64 --profile "$profile"
             mach test . --target linux-x86_64 --profile "$profile"
@@ -46,7 +46,7 @@ jobs:
         run: |
           set -euo pipefail
           cd test/consumer
-          mach dep pull
+          mach dep pull .
           for profile in debug release; do
             mach build . --target linux-x86_64 --profile "$profile"
             exe="out/linux-x86_64/$profile/bin/audio-consumer"
@@ -90,12 +90,12 @@ jobs:
       - name: Build Windows artifacts
         run: |
           set -euo pipefail
-          mach dep pull
+          mach dep pull .
           for profile in debug release; do
             mach build . --target windows --profile "$profile"
           done
           cd test/consumer
-          mach dep pull
+          mach dep pull .
           for profile in debug release; do
             mach build . --target windows --profile "$profile"
           done
@@ -105,7 +105,7 @@ jobs:
           set -euo pipefail
           for profile in debug release; do
             tools/check-windows-pe.sh \
-              "out/windows/$profile/obj/miniaudio/miniaudio.o" \
+              "out/windows/$profile/vendor/miniaudio/miniaudio.o" \
               "out/windows/$profile/bin/play.exe" \
               "test/consumer/out/windows/$profile/bin/audio-consumer.exe"
           done
@@ -152,13 +152,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          mach.exe dep pull
+          mach.exe dep pull .
           for profile in debug release; do
             mach.exe build . --target windows --profile "$profile"
             mach.exe test . --target windows --profile "$profile"
           done
           cd test/consumer
-          mach.exe dep pull
+          mach.exe dep pull .
           for profile in debug release; do
             mach.exe build . --target windows --profile "$profile"
             exe="out/windows/$profile/bin/audio-consumer.exe"
@@ -172,7 +172,7 @@ jobs:
           set -euo pipefail
           for profile in debug release; do
             tools/check-windows-pe.sh \
-              "out/windows/$profile/obj/miniaudio/miniaudio.o" \
+              "out/windows/$profile/vendor/miniaudio/miniaudio.o" \
               "out/windows/$profile/bin/play.exe" \
               "test/consumer/out/windows/$profile/bin/audio-consumer.exe"
           done
@@ -200,10 +200,10 @@ jobs:
       - name: Build and test CoreAudio shim
         run: |
           set -euo pipefail
-          mach dep pull
+          mach dep pull .
           for profile in debug release; do
             if ! mach build . --target darwin --profile "$profile"; then
-              otool -rv "out/darwin/$profile/obj/miniaudio/miniaudio.o" | \
+              otool -rv "out/darwin/$profile/vendor/miniaudio/miniaudio.o" | \
                 awk '/^Relocation information/{section=$0} /SUBTRACTOR/{print section; print}'
               exit 1
             fi
@@ -214,7 +214,7 @@ jobs:
         run: |
           set -euo pipefail
           cd test/consumer
-          mach dep pull
+          mach dep pull .
           for profile in debug release; do
             mach build . --target darwin --profile "$profile"
             exe="out/darwin/$profile/bin/audio-consumer"
@@ -227,7 +227,7 @@ jobs:
           set -euo pipefail
           for profile in debug release; do
             tools/check-darwin-macho.sh \
-              "out/darwin/$profile/obj/miniaudio/miniaudio.o" \
+              "out/darwin/$profile/vendor/miniaudio/miniaudio.o" \
               "out/darwin/$profile/bin/play" \
               "test/consumer/out/darwin/$profile/bin/audio-consumer"
           done

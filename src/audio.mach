@@ -17,6 +17,7 @@ use std.runtime;
 
 fwd buffer.Format;
 fwd buffer.Buffer;
+fwd buffer.BufferError;
 fwd buffer.init;
 fwd buffer.dnit;
 fwd buffer.sample_count;
@@ -39,6 +40,7 @@ fwd mixer.stereo_to_mono;
 fwd resample.resample_frame_count;
 fwd resample.resample_linear;
 
+fwd wav.DecodeError;
 fwd wav.decode;
 
 fwd stream.Stream;
@@ -51,6 +53,7 @@ fwd stream.done;
 
 fwd device.RenderFn;
 fwd device.Device;
+fwd device.DeviceError;
 fwd device.open;
 fwd device.start;
 fwd device.stop;

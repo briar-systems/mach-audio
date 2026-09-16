@@ -5,6 +5,7 @@ src     = "src"
 out     = "out/{target.name}/{profile.name}"
 
 [target.linux-x86_64]
+default = true
 isa = "x86_64"
 os  = "linux"
 abi = "sysv64"
@@ -20,19 +21,25 @@ os  = "darwin"
 abi = "sysv64"
 
 [profile.debug]
+default = true
 opt   = 0
 debug = true
 simd = "scalarize"
+vectorize = false
+float_reassoc = false
 
 [profile.release]
 opt   = 2
 debug = false
 simd = "scalarize"
+vectorize = false
+float_reassoc = false
 
 [artifact.audio]
 kind    = "static"
 entry   = "audio.mach"
 out     = "lib/audio"
+default = true
 targets = ["*"]
 link    = [
     "miniaudio-local", "mingw32", "compiler-rt",
@@ -70,7 +77,7 @@ need    = []
 
 [link.miniaudio-local]
 source = "local"
-path   = "{project.out}/obj/miniaudio/miniaudio.o"
+path   = "{project.out}/vendor/miniaudio/miniaudio.o"
 os     = ["linux", "windows", "darwin"]
 isa    = "*"
 abi    = "*"
@@ -78,7 +85,7 @@ export = true
 
 [link.mingw32]
 source = "local"
-path   = "{project.out}/obj/miniaudio/mingw/libmingw32.lib"
+path   = "{project.out}/vendor/miniaudio/mingw/libmingw32.lib"
 os     = ["windows"]
 isa    = "*"
 abi    = "*"
@@ -86,7 +93,7 @@ export = true
 
 [link.compiler-rt]
 source = "local"
-path   = "{project.out}/obj/miniaudio/mingw/compiler_rt.lib"
+path   = "{project.out}/vendor/miniaudio/mingw/compiler_rt.lib"
 os     = ["windows"]
 isa    = "*"
 abi    = "*"
@@ -170,7 +177,7 @@ export = true
 [link.libSystem]
 source = "system"
 name   = "/usr/lib/libSystem.B.dylib"
-library = "/usr/lib/libSystem.B.dylib"
+library = "libSystem"
 symbols = [
     "___chkstk_darwin", "__assert_rtn", "__bzero", "__stack_chk_fail",
     "__stack_chk_guard", "clock_gettime", "exp", "free", "gettimeofday",
@@ -228,20 +235,24 @@ abi    = "*"
 export = true
 
 [step.build-miniaudio]
-cmd  = "bash tools/build-miniaudio.sh {project.out}/obj/miniaudio/miniaudio.o"
+argv = ["sh", "tools/build-miniaudio.sh", "{project.out}/vendor/miniaudio/miniaudio.o"]
 in   = ["tools/build-miniaudio.sh", "vendor/mad.c", "vendor/miniaudio.h"]
-out  = ["{project.out}/obj/miniaudio/miniaudio.o"]
+out  = ["{project.out}/vendor/miniaudio/miniaudio.o"]
 need = []
 
 [step.mingw-runtime]
-cmd  = "bash tools/materialize-mingw-runtime.sh {project.out}/obj/miniaudio/mingw/libmingw32.lib {project.out}/obj/miniaudio/mingw/compiler_rt.lib"
+argv = [
+    "sh", "tools/materialize-mingw-runtime.sh",
+    "{project.out}/vendor/miniaudio/mingw/libmingw32.lib",
+    "{project.out}/vendor/miniaudio/mingw/compiler_rt.lib",
+]
 in   = ["tools/materialize-mingw-runtime.sh"]
 out  = [
-    "{project.out}/obj/miniaudio/mingw/libmingw32.lib",
-    "{project.out}/obj/miniaudio/mingw/compiler_rt.lib",
+    "{project.out}/vendor/miniaudio/mingw/libmingw32.lib",
+    "{project.out}/vendor/miniaudio/mingw/compiler_rt.lib",
 ]
 need = []
 
-[dep.mach-std]
+[dep.std]
 git = "https://github.com/briar-systems/mach-std"
-ref = "branch/main"
+ref = "tag/v2.1.0"

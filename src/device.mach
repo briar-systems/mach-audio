@@ -18,12 +18,8 @@
 # runtime archives, and target-filtered system/framework links from mach.toml.
 # those requirements cascade to consumers; the pure-mach layer links nothing.
 
-use std.types.result.Result;
-use std.types.result.ok;
-use std.types.result.err;
-use std.types.bool.bool;
-use std.types.bool.true;
-use std.types.string.str;
+use std.types.error.err;
+use std.types.result.res;
 
 use buffer: audio.buffer;
 
@@ -37,8 +33,11 @@ use buffer: audio.buffer;
 # user:        the opaque pointer passed to open
 pub def RenderFn: fun(*f32, u32, u32, ptr);
 
-# open an f32 playback device; returns an opaque handle or nil on failure
-ext fun mad_device_open(sample_rate: u32, channels: u32, render: RenderFn, user: ptr) ptr;
+# open an f32 playback device into out; 0, a negative ma_result, or MAD_NULL_BACKEND
+ext fun mad_device_open(sample_rate: u32, channels: u32, render: RenderFn, user: ptr, out: *ptr) i32;
+
+# mad_device_open's status when only the null backend could be opened
+val MAD_NULL_BACKEND: i32 = 1;
 
 # start the device's audio thread; 0 on success
 ext fun mad_device_start(dev: ptr) i32;
@@ -57,6 +56,21 @@ ext fun mad_device_channels(dev: ptr) u32;
 
 ext fun mad_device_probe_null() i32;
 
+# why a device operation refused
+# ---
+# channels:    the requested format declares zero channels
+# render:      the render callback is nil
+# closed:      the device is not open
+# unavailable: no real output backend is available, only miniaudio's null backend
+# backend:     the backend refused, with miniaudio's negative ma_result code
+pub tag DeviceError: u8 {
+    channels;
+    render;
+    closed;
+    unavailable;
+    backend: i32;
+}
+
 # an open playback device driven by a render callback
 # ---
 # handle: opaque shim-owned device handle, nil once closed
@@ -74,51 +88,52 @@ pub rec Device {
 # format: requested rate and channel layout; channels must be >= 1
 # render: callback invoked on the audio thread to fill output (see RenderFn)
 # user:   opaque pointer handed back to every render call
-# ret:    an open Device, or an error if the format is invalid, no real backend
-#         is available, or the selected backend fails
-pub fun open(format: buffer.Format, render: RenderFn, user: ptr) Result[Device, str] {
-    if (format.channels == 0) { ret err[Device, str]("format requires at least one channel"); }
-    if (render == nil) { ret err[Device, str]("render callback is nil"); }
+# ret:    an open Device, or why none could be opened
+pub fun open(format: buffer.Format, render: RenderFn, user: ptr) res[Device, DeviceError] {
+    if (format.channels == 0) { ret res[Device, DeviceError].err{DeviceError.channels{}}; }
+    if (render == nil) { ret res[Device, DeviceError].err{DeviceError.render{}}; }
 
-    val h: ptr = mad_device_open(format.sample_rate, format.channels::u32, render, user);
-    if (h == nil) { ret err[Device, str]("failed to open audio device"); }
+    var h: ptr = nil;
+    val status: i32 = mad_device_open(format.sample_rate, format.channels::u32, render, user, ?h);
+    if (status == MAD_NULL_BACKEND) { ret res[Device, DeviceError].err{DeviceError.unavailable{}}; }
+    if (status != 0) { ret res[Device, DeviceError].err{DeviceError.backend{status}}; }
 
     var d: Device;
     d.handle = h;
-    ret ok[Device, str](d);
+    ret res[Device, DeviceError].ok{d};
 }
 
 # start playback: the audio thread begins calling render
 # ---
 # dev: an open device
-# ret: true on success, or an error if the device is closed or the backend fails
-pub fun start(dev: *Device) Result[bool, str] {
-    if (dev == nil || dev.handle == nil) { ret err[bool, str]("device is not open"); }
-    if (mad_device_start(dev.handle) != 0) { ret err[bool, str]("failed to start audio device"); }
-    ret ok[bool, str](true);
+# ret: ok, or closed when the device is not open, or the backend's refusal
+pub fun start(dev: *Device) err[DeviceError] {
+    if (dev == nil || dev.handle == nil) { ret err[DeviceError].err{DeviceError.closed{}}; }
+    val status: i32 = mad_device_start(dev.handle);
+    if (status != 0) { ret err[DeviceError].err{DeviceError.backend{status}}; }
+    ret err[DeviceError].ok{};
 }
 
 # stop playback: render stops being called; the device stays open and restartable
 # ---
 # dev: an open device
-# ret: true on success, or an error if the device is closed or the backend fails
-pub fun stop(dev: *Device) Result[bool, str] {
-    if (dev == nil || dev.handle == nil) { ret err[bool, str]("device is not open"); }
-    if (mad_device_stop(dev.handle) != 0) { ret err[bool, str]("failed to stop audio device"); }
-    ret ok[bool, str](true);
+# ret: ok, or closed when the device is not open, or the backend's refusal
+pub fun stop(dev: *Device) err[DeviceError] {
+    if (dev == nil || dev.handle == nil) { ret err[DeviceError].err{DeviceError.closed{}}; }
+    val status: i32 = mad_device_stop(dev.handle);
+    if (status != 0) { ret err[DeviceError].err{DeviceError.backend{status}}; }
+    ret err[DeviceError].ok{};
 }
 
 # close the device and release its handle
 # ---
 # dev: a device to close; safe to call more than once (the handle is cleared)
-# ret: true once closed
-pub fun close(dev: *Device) bool {
-    if (dev == nil) { ret true; }
+pub fun close(dev: *Device) {
+    if (dev == nil) { ret; }
     if (dev.handle != nil) {
         mad_device_close(dev.handle);
         dev.handle = nil;
     }
-    ret true;
 }
 
 # the rate, in Hz, the device feeds the callback
@@ -143,3 +158,27 @@ test "device: native shim runs the null backend lifecycle" {
     if (mad_device_probe_null() != 0) { ret 1; }
     ret 0;
 }
+
+test "device: invalid requests are refused before the backend" {
+    var fmt: buffer.Format;
+    fmt.sample_rate = 48000;
+    fmt.channels    = 0;
+    val none: res[Device, DeviceError] = open(fmt, silent, nil);
+    if (!(sel none.err && sel none.err.channels)) { ret 1; }
+
+    fmt.channels = 2;
+    val unset: res[Device, DeviceError] = open(fmt, nil, nil);
+    if (!(sel unset.err && sel unset.err.render)) { ret 2; }
+
+    var closed: Device;
+    closed.handle = nil;
+    val started: err[DeviceError] = start(?closed);
+    if (!(sel started.err && sel started.err.closed)) { ret 3; }
+    val stopped: err[DeviceError] = stop(?closed);
+    if (!(sel stopped.err && sel stopped.err.closed)) { ret 4; }
+    close(?closed);
+    ret 0;
+}
+
+# a render callback that leaves the output untouched. test fixture
+fun silent(out: *f32, frames: u32, channels: u32, user: ptr) {}
