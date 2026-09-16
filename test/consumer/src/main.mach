@@ -12,6 +12,6 @@ fun main(argc: i64, argv: **u8) i64 {
     device.handle = nil;
     if (audio.sample_rate(device) != 0) { ret 1; }
     if (mad_device_probe_null() != 0)   { ret 1; }
-    print.println("consumer smoke ok");
+    print.println("consumer smoke skipped");
     ret 0;
 }
