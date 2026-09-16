@@ -12,7 +12,7 @@ use std.types.result.res;
 use std.types.size.usize;
 
 use allo: std.allocator;
-use page: std.allocator.page;
+use std.allocator.page;
 
 # the interpretation of an interleaved f32 sample stream
 # ---
@@ -136,8 +136,8 @@ test "buffer: init allocates zeroed interleaved storage" {
     if (sel made.err) { ret 1; }
     var buf: Buffer = made.ok;
 
-    if (buf.frames != 4) { ret 1; }
-    if (sample_count(buf) != 8) { ret 1; }
+    if (buf.frames != 4)                 { ret 1; }
+    if (sample_count(buf) != 8)          { ret 1; }
     if (buf.format.sample_rate != 48000) { ret 1; }
 
     var i: usize = 0;
@@ -214,8 +214,8 @@ test "buffer: zero frames allocates nothing and dnit is a noop" {
     if (sel made.err) { ret 1; }
     var buf: Buffer = made.ok;
     if (sample_count(buf) != 0) { ret 1; }
-    if (buf.samples != nil) { ret 1; }
-    if (!released(dnit(?buf))) { ret 1; }
+    if (buf.samples != nil)     { ret 1; }
+    if (!released(dnit(?buf)))  { ret 1; }
     ret 0;
 }
 

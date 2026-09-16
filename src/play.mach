@@ -9,22 +9,22 @@
 # the audio thread only pulls from that finished buffer - so the render callback
 # never allocates or locks, honoring the real-time contract in audio.device.
 
-use std.runtime;
 use std.collections.vector.Vector;
+use std.runtime;
 use std.types.bool.false;
 use std.types.error.err;
 use std.types.result.res;
 use std.types.size.usize;
 use std.types.string.str;
 
-use print:  std.print;
-use allo:   std.allocator;
-use page:   std.allocator.page;
-use fs:     std.filesystem;
-use os:     std.system.os;
-use vector: std.collections.vector;
+use allo: std.allocator;
+use std.allocator.page;
+use std.collections.vector;
+use fs: std.filesystem;
+use std.print;
+use std.system.os;
 # the full path, since a bare `use audio;` here would bind this artifact's own entry.
-use audio:  audio.audio;
+use audio.audio;
 
 # audio-thread render callback: pull the next frames from the borrowed Stream.
 # real-time safe - no allocation, no locks (audio.stream.pull guarantees it).
@@ -48,7 +48,7 @@ fun main(argc: i64, argv: **u8) i64 {
     }
     val path: str = argv[1]::str;
 
-    var a: allo.Allocator;
+    var a:    allo.Allocator;
     val made: err[allo.Error] = page.make(?a);
     if (sel made.err) {
         print.eprintlnf("cannot create allocator: {}", case_name[allo.Error](made.err));
