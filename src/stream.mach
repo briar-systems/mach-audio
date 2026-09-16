@@ -7,16 +7,16 @@
 # must already match the device format (convert with audio.resample / audio.mix
 # on the main thread first). nothing here touches the device layer.
 
-use std.types.size.usize;
 use std.types.bool.bool;
-use std.types.bool.true;
 use std.types.bool.false;
-use std.types.string.str;
+use std.types.bool.true;
+use std.types.error.err;
+use std.types.result.res;
+use std.types.size.usize;
 
-use R:    std.types.result;
+use audio.buffer;
 use allo: std.allocator;
-use page: std.allocator.page;
-use buffer: audio.buffer;
+use std.allocator.page;
 
 # a cursor over a decoded, interleaved f32 source
 #
@@ -103,7 +103,10 @@ pub fun pull(s: *Stream, out: *f32, frame_count: u32, channels: u32) {
 
     if (s == nil || s.samples == nil || s.frames == 0 || (s.channels::usize) != ch) {
         var z: usize = 0;
-        for (z < fc * ch) { out[z] = 0.0; z = z + 1; }
+        for (z < fc * ch) {
+            out[z] = 0.0;
+            z      = z + 1;
+        }
         ret;
     }
 
@@ -117,9 +120,13 @@ pub fun pull(s: *Stream, out: *f32, frame_count: u32, channels: u32) {
             if (s.cursor >= s.frames) {
                 if (s.looping) {
                     s.cursor = 0;
-                } or {
+                }
+                or {
                     var c0: usize = 0;
-                    for (c0 < ch) { out[f * ch + c0] = 0.0; c0 = c0 + 1; }
+                    for (c0 < ch) {
+                        out[f * ch + c0] = 0.0;
+                        c0               = c0 + 1;
+                    }
                     f = f + 1;
                     cnt;
                 }
@@ -127,7 +134,7 @@ pub fun pull(s: *Stream, out: *f32, frame_count: u32, channels: u32) {
             var c: usize = 0;
             for (c < ch) {
                 out[f * ch + c] = s.samples[s.cursor * ch + c];
-                c = c + 1;
+                c               = c + 1;
             }
             s.cursor = s.cursor + 1;
             f        = f + 1;
@@ -140,9 +147,13 @@ pub fun pull(s: *Stream, out: *f32, frame_count: u32, channels: u32) {
         if (s.cursor >= s.frames) {
             if (s.looping) {
                 s.cursor = s.cursor % s.frames;
-            } or {
+            }
+            or {
                 var c0: usize = 0;
-                for (c0 < ch) { out[f * ch + c0] = 0.0; c0 = c0 + 1; }
+                for (c0 < ch) {
+                    out[f * ch + c0] = 0.0;
+                    c0               = c0 + 1;
+                }
                 f = f + 1;
                 cnt;
             }
@@ -162,10 +173,10 @@ pub fun pull(s: *Stream, out: *f32, frame_count: u32, channels: u32) {
             val a: f32 = s.samples[s.cursor * ch + c];
             val b: f32 = s.samples[nxt * ch + c];
             out[f * ch + c] = a + (b - a) * s.frac;
-            c = c + 1;
+            c               = c + 1;
         }
 
-        var adv: f32 = s.frac + s.rate;
+        var adv:   f32   = s.frac + s.rate;
         var whole: usize = 0;
         for (adv >= 1.0) {
             adv   = adv - 1.0;
@@ -177,7 +188,7 @@ pub fun pull(s: *Stream, out: *f32, frame_count: u32, channels: u32) {
         # a valid frame index and a caller inspecting it between pulls is not
         # looking at a value past the end.
         if (s.looping && s.cursor >= s.frames) { s.cursor = s.cursor % s.frames; }
-        f        = f + 1;
+        f = f + 1;
     }
 }
 
@@ -194,7 +205,7 @@ pub fun done(s: Stream) bool {
 
 test "stream: pull copies frames and advances the cursor" {
     var src: [8]f32 = [8]f32{0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8};
-    var s: Stream;
+    var s:   Stream;
     s.samples  = ?src[0];
     s.frames   = 4;
     s.channels = 2;
@@ -206,14 +217,14 @@ test "stream: pull copies frames and advances the cursor" {
     var out: [4]f32;
     pull(?s, ?out[0], 2, 2);
     if (out[0] != 0.1 || out[1] != 0.2 || out[2] != 0.3 || out[3] != 0.4) { ret 1; }
-    if (s.cursor != 2) { ret 1; }
-    if (done(s)) { ret 1; }
+    if (s.cursor != 2)                                                    { ret 1; }
+    if (done(s))                                                          { ret 1; }
     ret 0;
 }
 
 test "stream: pull zero-fills past the end when not looping" {
     var src: [2]f32 = [2]f32{0.5, -0.5};
-    var s: Stream;
+    var s:   Stream;
     s.samples  = ?src[0];
     s.frames   = 1;
     s.channels = 2;
@@ -224,15 +235,15 @@ test "stream: pull zero-fills past the end when not looping" {
 
     var out: [6]f32 = [6]f32{9.0, 9.0, 9.0, 9.0, 9.0, 9.0};
     pull(?s, ?out[0], 3, 2);
-    if (out[0] != 0.5 || out[1] != -0.5) { ret 1; }
+    if (out[0] != 0.5 || out[1] != -0.5)                                  { ret 1; }
     if (out[2] != 0.0 || out[3] != 0.0 || out[4] != 0.0 || out[5] != 0.0) { ret 1; }
-    if (!done(s)) { ret 1; }
+    if (!done(s))                                                         { ret 1; }
     ret 0;
 }
 
 test "stream: looping wraps to the start" {
     var src: [2]f32 = [2]f32{1.0, 2.0};
-    var s: Stream;
+    var s:   Stream;
     s.samples  = ?src[0];
     s.frames   = 2;
     s.channels = 1;
@@ -245,13 +256,13 @@ test "stream: looping wraps to the start" {
     pull(?s, ?out[0], 5, 1);
     # 1,2 then wrap: 1,2,1
     if (out[0] != 1.0 || out[1] != 2.0 || out[2] != 1.0 || out[3] != 2.0 || out[4] != 1.0) { ret 1; }
-    if (done(s)) { ret 1; }
+    if (done(s))                                                                           { ret 1; }
     ret 0;
 }
 
 test "stream: channel mismatch yields silence" {
     var src: [4]f32 = [4]f32{0.3, 0.3, 0.3, 0.3};
-    var s: Stream;
+    var s:   Stream;
     s.samples  = ?src[0];
     s.frames   = 4;
     s.channels = 1;
@@ -274,13 +285,16 @@ test "stream: stream_over borrows the buffer at frame zero" {
     fmt.sample_rate = 48000;
     fmt.channels    = 2;
 
-    var buf: buffer.Buffer = R.unwrap_ok[buffer.Buffer, str](buffer.init(?a, fmt, 3));
-    var s: Stream = stream_over(?buf, false);
-    if (s.samples != buf.samples) { ret 1; }
+    val made: res[buffer.Buffer, buffer.BufferError] = buffer.init(?a, fmt, 3);
+    if (sel made.err) { ret 1; }
+    var buf: buffer.Buffer = made.ok;
+    var s:   Stream        = stream_over(?buf, false);
+    if (s.samples != buf.samples)                          { ret 1; }
     if (s.frames != 3 || s.channels != 2 || s.cursor != 0) { ret 1; }
-    if (s.looping) { ret 1; }
+    if (s.looping)                                         { ret 1; }
 
-    if (!buffer.dnit(?buf)) { ret 1; }
+    val released: err[allo.Error] = buffer.dnit(?buf);
+    if (sel released.err) { ret 1; }
     ret 0;
 }
 
@@ -290,7 +304,7 @@ test "stream: rate 1 returns the source sample for sample" {
     # deleting the fast path is invisible here and no test can see it: it is an
     # optimization and a guard against accumulator drift, not a behaviour.
     var src: [4]f32 = [4]f32{0.1, 0.2, 0.3, 0.4};
-    var s: Stream;
+    var s:   Stream;
     s.samples  = ?src[0];
     s.frames   = 4;
     s.channels = 1;
@@ -307,7 +321,7 @@ test "stream: rate 1 returns the source sample for sample" {
 
 test "stream: half rate interpolates between neighbours" {
     var src: [3]f32 = [3]f32{0.0, 1.0, 0.0};
-    var s: Stream;
+    var s:   Stream;
     s.samples  = ?src[0];
     s.frames   = 3;
     s.channels = 1;
@@ -328,7 +342,7 @@ test "stream: half rate interpolates between neighbours" {
 
 test "stream: double rate advances two source frames per output frame" {
     var src: [4]f32 = [4]f32{0.0, 0.1, 0.2, 0.3};
-    var s: Stream;
+    var s:   Stream;
     s.samples  = ?src[0];
     s.frames   = 4;
     s.channels = 1;
@@ -350,7 +364,7 @@ test "stream: a retuned stream still ends and still loops" {
     # The resampling path has its own end and wrap handling, so both have to be
     # pinned there too. A stream that never reports done leaks a voice forever.
     var src: [2]f32 = [2]f32{1.0, 2.0};
-    var s: Stream;
+    var s:   Stream;
     s.samples  = ?src[0];
     s.frames   = 2;
     s.channels = 1;
@@ -361,8 +375,8 @@ test "stream: a retuned stream still ends and still loops" {
 
     var out: [4]f32 = [4]f32{9.0, 9.0, 9.0, 9.0};
     pull(?s, ?out[0], 4, 1);
-    if (!done(s))       { ret 1; }
-    if (out[3] != 0.0)  { ret 2; }
+    if (!done(s))      { ret 1; }
+    if (out[3] != 0.0) { ret 2; }
 
     var l: Stream;
     l.samples  = ?src[0];
@@ -375,14 +389,14 @@ test "stream: a retuned stream still ends and still loops" {
 
     var lout: [8]f32;
     pull(?l, ?lout[0], 8, 1);
-    if (done(l))            { ret 3; }
+    if (done(l))              { ret 3; }
     if (l.cursor >= l.frames) { ret 4; }
     ret 0;
 }
 
 test "stream: the rate setter clamps rather than hanging or racing" {
     var b: buffer.Buffer = empty_buffer();
-    var s: Stream = stream_over(?b, false);
+    var s: Stream        = stream_over(?b, false);
     stream_set_rate(?s, 0.0);
     if (s.rate != RATE_MIN) { ret 1; }
     stream_set_rate(?s, -4.0);
@@ -396,8 +410,8 @@ test "stream: the rate setter clamps rather than hanging or racing" {
 
 fun empty_buffer() buffer.Buffer {
     var b: buffer.Buffer;
-    b.samples = nil;
-    b.frames  = 0;
+    b.samples         = nil;
+    b.frames          = 0;
     b.format.channels = 1;
     ret b;
 }

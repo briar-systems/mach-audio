@@ -5,20 +5,14 @@
 # channel count); a Buffer owns one such stream. the future device layer hands
 # this type up and takes it back, nothing here touches the device.
 
-use std.types.result.Result;
-use std.types.result.ok;
-use std.types.result.err;
-use std.types.result.is_ok;
-use std.types.result.is_err;
-use std.types.result.unwrap_ok;
-use std.types.result.unwrap_err;
 use std.types.bool.bool;
-use std.types.bool.true;
+use std.types.error.err;
+use std.types.option.opt;
+use std.types.result.res;
 use std.types.size.usize;
-use std.types.string.str;
 
 use allo: std.allocator;
-use page: std.allocator.page;
+use std.allocator.page;
 
 # the interpretation of an interleaved f32 sample stream
 # ---
@@ -45,53 +39,61 @@ pub rec Buffer {
     samples: *f32;
 }
 
+# why a Buffer could not be allocated
+# ---
+# channels: the format declares zero channels
+# overflow: frames * channels does not fit usize
+# alloc:    the allocator refused, including a nil allocator as invalid
+pub tag BufferError: u8 {
+    channels;
+    overflow;
+    alloc: allo.Error;
+}
+
 # allocate a zeroed Buffer of the given frame count
 # ---
 # a:      allocator to back the sample storage
 # format: rate and channel layout; channels must be >= 1
 # frames: number of frames to allocate
-# ret:    a zeroed Buffer, or an error on invalid format, overflow, or OOM
-pub fun init(a: *allo.Allocator, format: Format, frames: usize) Result[Buffer, str] {
-    if (a == nil) {
-        ret err[Buffer, str]("allocator is nil");
-    }
+# ret:    a zeroed Buffer, or why it could not be allocated
+pub fun init(a: *allo.Allocator, format: Format, frames: usize) res[Buffer, BufferError] {
     if (format.channels == 0) {
-        ret err[Buffer, str]("format requires at least one channel");
+        ret res[Buffer, BufferError].err{BufferError.channels{}};
     }
 
     val ch: usize = format.channels::usize;
     if (frames > (~(0::usize)) / ch) {
-        ret err[Buffer, str]("sample count overflow");
+        ret res[Buffer, BufferError].err{BufferError.overflow{}};
     }
     val total: usize = frames * ch;
 
-    val res: Result[*f32, str] = allo.zallocate[f32](a, total);
-    if (is_err[*f32, str](res)) {
-        ret err[Buffer, str](unwrap_err[*f32, str](res));
+    val storage: res[*f32, allo.Error] = allo.zallocate[f32](a, total);
+    if (sel storage.err) {
+        ret res[Buffer, BufferError].err{BufferError.alloc{storage.err}};
     }
 
     var buf: Buffer;
     buf.alloc   = a;
     buf.format  = format;
     buf.frames  = frames;
-    buf.samples = unwrap_ok[*f32, str](res);
-    ret ok[Buffer, str](buf);
+    buf.samples = storage.ok;
+    ret res[Buffer, BufferError].ok{buf};
 }
 
 # free the sample storage and reset the buffer to empty
+#
+# a refused release leaves the buffer owning its storage.
 # ---
-# ret: true if the backing memory was released
-pub fun dnit(buf: *Buffer) bool {
-    if (buf == nil) { ret true; }
+# buf: buffer to release; nil is a no-op
+# ret: ok once the storage is released, or the allocator's refusal
+pub fun dnit(buf: *Buffer) err[allo.Error] {
+    if (buf == nil) { ret err[allo.Error].ok{}; }
 
-    val total: usize = sample_count(@buf);
-
-    val freed: bool = is_ok[bool, str](allo.deallocate[f32](buf.alloc, buf.samples, total));
-    if (freed) {
-        buf.samples = nil;
-        buf.frames  = 0;
-    }
-    ret freed;
+    val released: err[allo.Error] = allo.deallocate[f32](buf.alloc, buf.samples, sample_count(@buf));
+    if (sel released.err) { ret released; }
+    buf.samples = nil;
+    buf.frames  = 0;
+    ret released;
 }
 
 # total interleaved samples in the buffer (frames * channels)
@@ -107,14 +109,19 @@ pub fun sample_count(buf: Buffer) usize {
 # buf:     buffer to index
 # frame:   frame index (0 .. frames-1)
 # channel: channel index (0 .. channels-1)
-# ret:     pointer to the sample, or an error if either index is out of range
-pub fun at(buf: *Buffer, frame: usize, channel: usize) Result[*f32, str] {
-    if (buf == nil) { ret err[*f32, str]("buffer is nil"); }
+# ret:     pointer to the sample, or none when buf is nil or either index is out of range
+pub fun at(buf: *Buffer, frame: usize, channel: usize) opt[*f32] {
+    if (buf == nil) { ret opt[*f32].none{}; }
     val ch: usize = buf.format.channels::usize;
     if (frame >= buf.frames || channel >= ch) {
-        ret err[*f32, str]("sample index out of bounds");
+        ret opt[*f32].none{};
     }
-    ret ok[*f32, str](?buf.samples[frame * ch + channel]);
+    ret opt[*f32].some{?buf.samples[frame * ch + channel]};
+}
+
+# true when a release completed. test fixture
+fun released(r: err[allo.Error]) bool {
+    ret sel r.ok;
 }
 
 test "buffer: init allocates zeroed interleaved storage" {
@@ -125,12 +132,12 @@ test "buffer: init allocates zeroed interleaved storage" {
     fmt.sample_rate = 48000;
     fmt.channels    = 2;
 
-    val res: Result[Buffer, str] = init(?a, fmt, 4);
-    if (is_err[Buffer, str](res)) { ret 1; }
-    var buf: Buffer = unwrap_ok[Buffer, str](res);
+    val made: res[Buffer, BufferError] = init(?a, fmt, 4);
+    if (sel made.err) { ret 1; }
+    var buf: Buffer = made.ok;
 
-    if (buf.frames != 4) { ret 1; }
-    if (sample_count(buf) != 8) { ret 1; }
+    if (buf.frames != 4)                 { ret 1; }
+    if (sample_count(buf) != 8)          { ret 1; }
     if (buf.format.sample_rate != 48000) { ret 1; }
 
     var i: usize = 0;
@@ -139,7 +146,7 @@ test "buffer: init allocates zeroed interleaved storage" {
         i = i + 1;
     }
 
-    if (!dnit(?buf)) { ret 1; }
+    if (!released(dnit(?buf))) { ret 1; }
     ret 0;
 }
 
@@ -151,17 +158,21 @@ test "buffer: at bounds-checks frame and channel" {
     fmt.sample_rate = 44100;
     fmt.channels    = 2;
 
-    var buf: Buffer = unwrap_ok[Buffer, str](init(?a, fmt, 3));
+    val made: res[Buffer, BufferError] = init(?a, fmt, 3);
+    if (sel made.err) { ret 1; }
+    var buf: Buffer = made.ok;
 
-    val ok0: Result[*f32, str] = at(?buf, 2, 1);
-    if (is_err[*f32, str](ok0)) { ret 1; }
-    @unwrap_ok[*f32, str](ok0) = 0.5;
+    val in_range: opt[*f32] = at(?buf, 2, 1);
+    if (sel in_range.none) { ret 1; }
+    @in_range.some = 0.5;
     if (buf.samples[2 * 2 + 1] != 0.5) { ret 1; }
 
-    if (is_ok[*f32, str](at(?buf, 3, 0))) { ret 1; }
-    if (is_ok[*f32, str](at(?buf, 0, 2))) { ret 1; }
+    val past_frame: opt[*f32] = at(?buf, 3, 0);
+    if (sel past_frame.some) { ret 1; }
+    val past_channel: opt[*f32] = at(?buf, 0, 2);
+    if (sel past_channel.some) { ret 1; }
 
-    if (!dnit(?buf)) { ret 1; }
+    if (!released(dnit(?buf))) { ret 1; }
     ret 0;
 }
 
@@ -173,7 +184,21 @@ test "buffer: zero channels is rejected" {
     fmt.sample_rate = 44100;
     fmt.channels    = 0;
 
-    if (is_ok[Buffer, str](init(?a, fmt, 8))) { ret 1; }
+    val made: res[Buffer, BufferError] = init(?a, fmt, 8);
+    if (!(sel made.err && sel made.err.channels)) { ret 1; }
+    ret 0;
+}
+
+test "buffer: an overflowing sample count is rejected" {
+    var a: allo.Allocator;
+    page.make(?a);
+
+    var fmt: Format;
+    fmt.sample_rate = 44100;
+    fmt.channels    = 2;
+
+    val made: res[Buffer, BufferError] = init(?a, fmt, ~(0::usize));
+    if (!(sel made.err && sel made.err.overflow)) { ret 1; }
     ret 0;
 }
 
@@ -185,10 +210,12 @@ test "buffer: zero frames allocates nothing and dnit is a noop" {
     fmt.sample_rate = 22050;
     fmt.channels    = 1;
 
-    var buf: Buffer = unwrap_ok[Buffer, str](init(?a, fmt, 0));
+    val made: res[Buffer, BufferError] = init(?a, fmt, 0);
+    if (sel made.err) { ret 1; }
+    var buf: Buffer = made.ok;
     if (sample_count(buf) != 0) { ret 1; }
-    if (buf.samples != nil) { ret 1; }
-    if (!dnit(?buf)) { ret 1; }
+    if (buf.samples != nil)     { ret 1; }
+    if (!released(dnit(?buf)))  { ret 1; }
     ret 0;
 }
 
@@ -197,7 +224,7 @@ test "buffer: nil allocator is rejected" {
     fmt.sample_rate = 44100;
     fmt.channels    = 2;
 
-    val res: Result[Buffer, str] = init(nil, fmt, 4);
-    if (is_ok[Buffer, str](res)) { ret 1; }
+    val made: res[Buffer, BufferError] = init(nil, fmt, 4);
+    if (!(sel made.err && (sel made.err.alloc && sel made.err.alloc.invalid))) { ret 1; }
     ret 0;
 }

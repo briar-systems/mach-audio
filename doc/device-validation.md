@@ -13,7 +13,7 @@ proves that one of the real backends compiled for that target initialized.
 Use a short, known-good PCM WAV and test both profiles on the physical machine:
 
 ```sh
-mach dep pull
+mach dep pull .
 mach build . --profile debug
 mach build . --profile release
 ./out/<target>/debug/bin/play sample.wav

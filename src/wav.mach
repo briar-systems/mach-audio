@@ -7,20 +7,16 @@
 # bounds-checked and malformed or truncated input is rejected with an error.
 # nothing here touches the device layer.
 
-use std.types.result.Result;
-use std.types.result.ok;
-use std.types.result.err;
-use std.types.result.is_err;
-use std.types.result.unwrap_ok;
 use std.types.bool.bool;
-use std.types.bool.true;
 use std.types.bool.false;
+use std.types.bool.true;
+use std.types.error.err;
+use std.types.result.res;
 use std.types.size.usize;
-use std.types.string.str;
 
-use allo:   std.allocator;
-use page:   std.allocator.page;
-use buffer: audio.buffer;
+use audio.buffer;
+use allo: std.allocator;
+use std.allocator.page;
 
 # audio format tags carried in the fmt chunk
 val FORMAT_PCM:        u32 = 1;
@@ -35,9 +31,9 @@ fun rd_u16(p: *u8, off: usize) u32 {
 # read a little-endian u32 at off. off+4 must be in bounds
 fun rd_u32(p: *u8, off: usize) u32 {
     ret (p[off]::u32)
-      | ((p[off + 1]::u32) << 8)
-      | ((p[off + 2]::u32) << 16)
-      | ((p[off + 3]::u32) << 24);
+        | ((p[off + 1]::u32) << 8)
+        | ((p[off + 2]::u32) << 16)
+        | ((p[off + 3]::u32) << 24);
 }
 
 # test whether the four bytes at off equal the given ascii tag
@@ -71,6 +67,37 @@ fun f32_to_f32(p: *u8, off: usize) f32 {
     ret rd_u32(p, off):~f32;
 }
 
+# why a WAVE byte stream was rejected
+# ---
+# nil_input:        data is nil
+# truncated_header: the input is shorter than the 12-byte RIFF header
+# not_riff:         the RIFF tag is missing
+# not_wave:         the WAVE form tag is missing
+# truncated_chunk:  a chunk extends past the end of the input
+# truncated_fmt:    the fmt chunk is shorter than its format tag requires
+# no_fmt:           there is no fmt chunk
+# no_data:          there is no data chunk
+# channels:         the channel count is neither mono nor stereo, with the count
+# zero_rate:        the sample rate is zero
+# format:           the audio format is neither PCM nor IEEE float, with its tag
+# bits:             the bit depth is unsupported for the format, with the depth
+# buffer:           the decoded Buffer could not be allocated
+pub tag DecodeError: u8 {
+    nil_input;
+    truncated_header;
+    not_riff;
+    not_wave;
+    truncated_chunk;
+    truncated_fmt;
+    no_fmt;
+    no_data;
+    channels: u32;
+    zero_rate;
+    format: u32;
+    bits:   u32;
+    buffer: buffer.BufferError;
+}
+
 # decode a RIFF/WAVE byte stream into an interleaved f32 Buffer
 #
 # supports PCM 16/24/32-bit and IEEE float32, mono and stereo. unknown chunks
@@ -80,12 +107,12 @@ fun f32_to_f32(p: *u8, off: usize) f32 {
 # a:    allocator to back the decoded Buffer
 # data: raw WAVE bytes
 # len:  number of bytes at data
-# ret:  the decoded Buffer, or an error describing the rejection
-pub fun decode(a: *allo.Allocator, data: *u8, len: usize) Result[buffer.Buffer, str] {
-    if (data == nil) { ret err[buffer.Buffer, str]("nil input"); }
-    if (len < 12) { ret err[buffer.Buffer, str]("input shorter than RIFF header"); }
-    if (!tag_eq(data, 0, 'R', 'I', 'F', 'F')) { ret err[buffer.Buffer, str]("missing RIFF tag"); }
-    if (!tag_eq(data, 8, 'W', 'A', 'V', 'E')) { ret err[buffer.Buffer, str]("missing WAVE tag"); }
+# ret:  the decoded Buffer, or why the input was rejected
+pub fun decode(a: *allo.Allocator, data: *u8, len: usize) res[buffer.Buffer, DecodeError] {
+    if (data == nil)                          { ret res[buffer.Buffer, DecodeError].err{DecodeError.nil_input{}}; }
+    if (len < 12)                             { ret res[buffer.Buffer, DecodeError].err{DecodeError.truncated_header{}}; }
+    if (!tag_eq(data, 0, 'R', 'I', 'F', 'F')) { ret res[buffer.Buffer, DecodeError].err{DecodeError.not_riff{}}; }
+    if (!tag_eq(data, 8, 'W', 'A', 'V', 'E')) { ret res[buffer.Buffer, DecodeError].err{DecodeError.not_wave{}}; }
 
     var have_fmt:    bool  = false;
     var have_data:   bool  = false;
@@ -105,21 +132,22 @@ pub fun decode(a: *allo.Allocator, data: *u8, len: usize) Result[buffer.Buffer, 
         # subtraction form (body <= len from the loop guard) avoids overflow on
         # a hypothetical narrow-pointer target where size could approach usize.
         if (size > len - body) {
-            ret err[buffer.Buffer, str]("chunk extends past end of input");
+            ret res[buffer.Buffer, DecodeError].err{DecodeError.truncated_chunk{}};
         }
 
         if (tag_eq(data, id_off, 'f', 'm', 't', ' ')) {
-            if (size < 16) { ret err[buffer.Buffer, str]("fmt chunk too small"); }
+            if (size < 16) { ret res[buffer.Buffer, DecodeError].err{DecodeError.truncated_fmt{}}; }
             fmt_format  = rd_u16(data, body);
             channels    = rd_u16(data, body + 2);
             sample_rate = rd_u32(data, body + 4);
             bits        = rd_u16(data, body + 14);
             if (fmt_format == FORMAT_EXTENSIBLE) {
-                if (size < 40) { ret err[buffer.Buffer, str]("extensible fmt chunk too small"); }
+                if (size < 40) { ret res[buffer.Buffer, DecodeError].err{DecodeError.truncated_fmt{}}; }
                 fmt_format = rd_u16(data, body + 24);
             }
             have_fmt = true;
-        } or (tag_eq(data, id_off, 'd', 'a', 't', 'a')) {
+        }
+        or (tag_eq(data, id_off, 'd', 'a', 't', 'a')) {
             data_off  = body;
             data_size = size;
             have_data = true;
@@ -131,17 +159,17 @@ pub fun decode(a: *allo.Allocator, data: *u8, len: usize) Result[buffer.Buffer, 
         off = body + advance;
     }
 
-    if (!have_fmt) { ret err[buffer.Buffer, str]("missing fmt chunk"); }
-    if (!have_data) { ret err[buffer.Buffer, str]("missing data chunk"); }
-    if (channels != 1 && channels != 2) { ret err[buffer.Buffer, str]("unsupported channel count"); }
-    if (sample_rate == 0) { ret err[buffer.Buffer, str]("sample rate is zero"); }
+    if (!have_fmt)                      { ret res[buffer.Buffer, DecodeError].err{DecodeError.no_fmt{}}; }
+    if (!have_data)                     { ret res[buffer.Buffer, DecodeError].err{DecodeError.no_data{}}; }
+    if (channels != 1 && channels != 2) { ret res[buffer.Buffer, DecodeError].err{DecodeError.channels{channels}}; }
+    if (sample_rate == 0)               { ret res[buffer.Buffer, DecodeError].err{DecodeError.zero_rate{}}; }
 
     val is_pcm:   bool = fmt_format == FORMAT_PCM;
     val is_float: bool = fmt_format == FORMAT_IEEE_FLOAT;
-    if (!is_pcm && !is_float) { ret err[buffer.Buffer, str]("unsupported audio format"); }
-    if (is_float && bits != 32) { ret err[buffer.Buffer, str]("unsupported float bit depth"); }
+    if (!is_pcm && !is_float)   { ret res[buffer.Buffer, DecodeError].err{DecodeError.format{fmt_format}}; }
+    if (is_float && bits != 32) { ret res[buffer.Buffer, DecodeError].err{DecodeError.bits{bits}}; }
     if (is_pcm && bits != 16 && bits != 24 && bits != 32) {
-        ret err[buffer.Buffer, str]("unsupported pcm bit depth");
+        ret res[buffer.Buffer, DecodeError].err{DecodeError.bits{bits}};
     }
 
     val bytes_per_sample: usize = (bits::usize) / 8;
@@ -153,17 +181,19 @@ pub fun decode(a: *allo.Allocator, data: *u8, len: usize) Result[buffer.Buffer, 
     fmt.sample_rate = sample_rate;
     fmt.channels    = channels::u16;
 
-    val bres: Result[buffer.Buffer, str] = buffer.init(a, fmt, frames);
-    if (is_err[buffer.Buffer, str](bres)) { ret bres; }
-    var buf: buffer.Buffer = unwrap_ok[buffer.Buffer, str](bres);
+    val made: res[buffer.Buffer, buffer.BufferError] = buffer.init(a, fmt, frames);
+    if (sel made.err) { ret res[buffer.Buffer, DecodeError].err{DecodeError.buffer{made.err}}; }
+    var buf: buffer.Buffer = made.ok;
 
     # pick the per-sample decoder once; the default covers 16-bit PCM.
     var convert: fun(*u8, usize) f32 = s16_to_f32;
     if (is_float) {
         convert = f32_to_f32;
-    } or (bits == 24) {
+    }
+    or (bits == 24) {
         convert = s24_to_f32;
-    } or (bits == 32) {
+    }
+    or (bits == 32) {
         convert = s32_to_f32;
     }
 
@@ -173,12 +203,12 @@ pub fun decode(a: *allo.Allocator, data: *u8, len: usize) Result[buffer.Buffer, 
         for (c < ch) {
             val at: usize = data_off + f * frame_bytes + c * bytes_per_sample;
             buf.samples[f * ch + c] = convert(data, at);
-            c = c + 1;
+            c                       = c + 1;
         }
         f = f + 1;
     }
 
-    ret ok[buffer.Buffer, str](buf);
+    ret res[buffer.Buffer, DecodeError].ok{buf};
 }
 
 # write a little-endian u16 to a byte buffer at off; returns off+2. test fixture
@@ -236,24 +266,24 @@ test "wav: decode 16-bit stereo PCM" {
     # two stereo frames: {L=0, R=16384}, {L=-32768, R=32767}
     var b: [52]u8;
     var o: usize = write_header(?b[0], FORMAT_PCM, 2, 44100, 16, 8);
-    o = le16(?b[0], o, 0);        # L0 = 0.0
-    o = le16(?b[0], o, 16384);    # R0 = 0.5
-    o = le16(?b[0], o, 0x8000);   # L1 = -1.0
-    o = le16(?b[0], o, 0x7FFF);   # R1 ~ +1.0
+    o = le16(?b[0], o, 0); # L0 = 0.0
+    o = le16(?b[0], o, 16384); # R0 = 0.5
+    o = le16(?b[0], o, 0x8000); # L1 = -1.0
+    o = le16(?b[0], o, 0x7FFF); # R1 ~ +1.0
 
-    val res: Result[buffer.Buffer, str] = decode(?a, ?b[0], 52);
-    if (is_err[buffer.Buffer, str](res)) { ret 1; }
-    var buf: buffer.Buffer = unwrap_ok[buffer.Buffer, str](res);
+    val decoded: res[buffer.Buffer, DecodeError] = decode(?a, ?b[0], 52);
+    if (sel decoded.err) { ret 1; }
+    var buf: buffer.Buffer = decoded.ok;
 
-    if (buf.format.channels != 2) { ret 1; }
-    if (buf.format.sample_rate != 44100) { ret 1; }
-    if (buf.frames != 2) { ret 1; }
-    if (buf.samples[0] != 0.0) { ret 1; }
-    if (buf.samples[1] != 0.5) { ret 1; }
-    if (buf.samples[2] != -1.0) { ret 1; }
+    if (buf.format.channels != 2)                       { ret 1; }
+    if (buf.format.sample_rate != 44100)                { ret 1; }
+    if (buf.frames != 2)                                { ret 1; }
+    if (buf.samples[0] != 0.0)                          { ret 1; }
+    if (buf.samples[1] != 0.5)                          { ret 1; }
+    if (buf.samples[2] != -1.0)                         { ret 1; }
     if (buf.samples[3] < 0.999 || buf.samples[3] > 1.0) { ret 1; }
 
-    if (!buffer.dnit(?buf)) { ret 1; }
+    if (!released(buffer.dnit(?buf))) { ret 1; }
     ret 0;
 }
 
@@ -265,23 +295,32 @@ test "wav: decode 24-bit mono PCM" {
     var b: [53]u8;
     var o: usize = write_header(?b[0], FORMAT_PCM, 1, 48000, 24, 9);
     # 0
-    b[o] = 0; b[o + 1] = 0; b[o + 2] = 0; o = o + 3;
+    b[o]     = 0;
+    b[o + 1] = 0;
+    b[o + 2] = 0;
+    o        = o + 3;
     # 0x400000 = 2^22 -> 0.5
-    b[o] = 0x00; b[o + 1] = 0x00; b[o + 2] = 0x40; o = o + 3;
+    b[o]     = 0x00;
+    b[o + 1] = 0x00;
+    b[o + 2] = 0x40;
+    o        = o + 3;
     # 0x800000 = -2^23 -> -1.0
-    b[o] = 0x00; b[o + 1] = 0x00; b[o + 2] = 0x80; o = o + 3;
+    b[o]     = 0x00;
+    b[o + 1] = 0x00;
+    b[o + 2] = 0x80;
+    o        = o + 3;
 
-    val res: Result[buffer.Buffer, str] = decode(?a, ?b[0], 53);
-    if (is_err[buffer.Buffer, str](res)) { ret 1; }
-    var buf: buffer.Buffer = unwrap_ok[buffer.Buffer, str](res);
+    val decoded: res[buffer.Buffer, DecodeError] = decode(?a, ?b[0], 53);
+    if (sel decoded.err) { ret 1; }
+    var buf: buffer.Buffer = decoded.ok;
 
     if (buf.format.channels != 1) { ret 1; }
-    if (buf.frames != 3) { ret 1; }
-    if (buf.samples[0] != 0.0) { ret 1; }
-    if (buf.samples[1] != 0.5) { ret 1; }
-    if (buf.samples[2] != -1.0) { ret 1; }
+    if (buf.frames != 3)          { ret 1; }
+    if (buf.samples[0] != 0.0)    { ret 1; }
+    if (buf.samples[1] != 0.5)    { ret 1; }
+    if (buf.samples[2] != -1.0)   { ret 1; }
 
-    if (!buffer.dnit(?buf)) { ret 1; }
+    if (!released(buffer.dnit(?buf))) { ret 1; }
     ret 0;
 }
 
@@ -291,18 +330,18 @@ test "wav: decode 32-bit mono PCM" {
 
     var b: [52]u8;
     var o: usize = write_header(?b[0], FORMAT_PCM, 1, 44100, 32, 8);
-    o = le32(?b[0], o, 0);            # 0.0
-    o = le32(?b[0], o, 0x40000000);  # 2^30 -> 0.5
+    o = le32(?b[0], o, 0); # 0.0
+    o = le32(?b[0], o, 0x40000000); # 2^30 -> 0.5
 
-    val res: Result[buffer.Buffer, str] = decode(?a, ?b[0], 52);
-    if (is_err[buffer.Buffer, str](res)) { ret 1; }
-    var buf: buffer.Buffer = unwrap_ok[buffer.Buffer, str](res);
+    val decoded: res[buffer.Buffer, DecodeError] = decode(?a, ?b[0], 52);
+    if (sel decoded.err) { ret 1; }
+    var buf: buffer.Buffer = decoded.ok;
 
-    if (buf.frames != 2) { ret 1; }
+    if (buf.frames != 2)       { ret 1; }
     if (buf.samples[0] != 0.0) { ret 1; }
     if (buf.samples[1] != 0.5) { ret 1; }
 
-    if (!buffer.dnit(?buf)) { ret 1; }
+    if (!released(buffer.dnit(?buf))) { ret 1; }
     ret 0;
 }
 
@@ -313,18 +352,18 @@ test "wav: decode 32-bit float stereo" {
     # one stereo frame {L=0.5, R=-0.25} written as IEEE float32 bit patterns
     var b: [52]u8;
     var o: usize = write_header(?b[0], FORMAT_IEEE_FLOAT, 2, 44100, 32, 8);
-    o = le32(?b[0], o, 0x3F000000);   # 0.5 as IEEE float32 bits
-    o = le32(?b[0], o, 0xBE800000);   # -0.25 as IEEE float32 bits
+    o = le32(?b[0], o, 0x3F000000); # 0.5 as IEEE float32 bits
+    o = le32(?b[0], o, 0xBE800000); # -0.25 as IEEE float32 bits
 
-    val res: Result[buffer.Buffer, str] = decode(?a, ?b[0], 52);
-    if (is_err[buffer.Buffer, str](res)) { ret 1; }
-    var buf: buffer.Buffer = unwrap_ok[buffer.Buffer, str](res);
+    val decoded: res[buffer.Buffer, DecodeError] = decode(?a, ?b[0], 52);
+    if (sel decoded.err) { ret 1; }
+    var buf: buffer.Buffer = decoded.ok;
 
-    if (buf.frames != 1) { ret 1; }
-    if (buf.samples[0] != 0.5) { ret 1; }
+    if (buf.frames != 1)         { ret 1; }
+    if (buf.samples[0] != 0.5)   { ret 1; }
     if (buf.samples[1] != -0.25) { ret 1; }
 
-    if (!buffer.dnit(?buf)) { ret 1; }
+    if (!released(buffer.dnit(?buf))) { ret 1; }
     ret 0;
 }
 
@@ -338,17 +377,19 @@ test "wav: unknown chunks are skipped" {
     var o: usize = 0;
     o = tag4(?b[0], o, 'R', 'I', 'F', 'F');
     val size_off: usize = o;
-    o = le32(?b[0], o, 0);            # patched below
+    o = le32(?b[0], o, 0); # patched below
     o = tag4(?b[0], o, 'W', 'A', 'V', 'E');
 
     o = tag4(?b[0], o, 'L', 'I', 'S', 'T');
     o = le32(?b[0], o, 4);
     o = le32(?b[0], o, 0x11223344);
 
-    o = tag4(?b[0], o, 'f', 'a', 'c', 't');
-    o = le32(?b[0], o, 1);
-    b[o] = 0xAB; o = o + 1;
-    b[o] = 0x00; o = o + 1;           # pad byte for odd size
+    o    = tag4(?b[0], o, 'f', 'a', 'c', 't');
+    o    = le32(?b[0], o, 1);
+    b[o] = 0xAB;
+    o    = o + 1;
+    b[o] = 0x00;
+    o    = o + 1; # pad byte for odd size
 
     o = tag4(?b[0], o, 'f', 'm', 't', ' ');
     o = le32(?b[0], o, 16);
@@ -361,20 +402,20 @@ test "wav: unknown chunks are skipped" {
 
     o = tag4(?b[0], o, 'd', 'a', 't', 'a');
     o = le32(?b[0], o, 4);
-    o = le16(?b[0], o, 16384);        # 0.5
-    o = le16(?b[0], o, 0x8000);       # -1.0
+    o = le16(?b[0], o, 16384); # 0.5
+    o = le16(?b[0], o, 0x8000); # -1.0
 
     le32(?b[0], size_off, (o::u32) - 8);
 
-    val res: Result[buffer.Buffer, str] = decode(?a, ?b[0], o);
-    if (is_err[buffer.Buffer, str](res)) { ret 1; }
-    var buf: buffer.Buffer = unwrap_ok[buffer.Buffer, str](res);
+    val decoded: res[buffer.Buffer, DecodeError] = decode(?a, ?b[0], o);
+    if (sel decoded.err) { ret 1; }
+    var buf: buffer.Buffer = decoded.ok;
 
-    if (buf.frames != 2) { ret 1; }
-    if (buf.samples[0] != 0.5) { ret 1; }
+    if (buf.frames != 2)        { ret 1; }
+    if (buf.samples[0] != 0.5)  { ret 1; }
     if (buf.samples[1] != -1.0) { ret 1; }
 
-    if (!buffer.dnit(?buf)) { ret 1; }
+    if (!released(buffer.dnit(?buf))) { ret 1; }
     ret 0;
 }
 
@@ -393,15 +434,15 @@ test "wav: extensible wrapper resolves to pcm" {
     o = tag4(?b[0], o, 'f', 'm', 't', ' ');
     o = le32(?b[0], o, 40);
     o = le16(?b[0], o, FORMAT_EXTENSIBLE);
-    o = le16(?b[0], o, 1);            # channels
+    o = le16(?b[0], o, 1); # channels
     o = le32(?b[0], o, 44100);
     o = le32(?b[0], o, 88200);
-    o = le16(?b[0], o, 2);            # block align
-    o = le16(?b[0], o, 16);           # bits
-    o = le16(?b[0], o, 22);           # cbSize
-    o = le16(?b[0], o, 16);           # valid bits
-    o = le32(?b[0], o, 0x4);          # channel mask
-    o = le16(?b[0], o, FORMAT_PCM);   # SubFormat tag
+    o = le16(?b[0], o, 2); # block align
+    o = le16(?b[0], o, 16); # bits
+    o = le16(?b[0], o, 22); # cbSize
+    o = le16(?b[0], o, 16); # valid bits
+    o = le32(?b[0], o, 0x4); # channel mask
+    o = le16(?b[0], o, FORMAT_PCM); # SubFormat tag
     o = le16(?b[0], o, 0);
     o = le32(?b[0], o, 0);
     o = le32(?b[0], o, 0);
@@ -409,17 +450,17 @@ test "wav: extensible wrapper resolves to pcm" {
 
     o = tag4(?b[0], o, 'd', 'a', 't', 'a');
     o = le32(?b[0], o, 2);
-    o = le16(?b[0], o, 16384);        # 0.5
+    o = le16(?b[0], o, 16384); # 0.5
 
     le32(?b[0], size_off, (o::u32) - 8);
 
-    val res: Result[buffer.Buffer, str] = decode(?a, ?b[0], o);
-    if (is_err[buffer.Buffer, str](res)) { ret 1; }
-    var buf: buffer.Buffer = unwrap_ok[buffer.Buffer, str](res);
-    if (buf.frames != 1) { ret 1; }
+    val decoded: res[buffer.Buffer, DecodeError] = decode(?a, ?b[0], o);
+    if (sel decoded.err) { ret 1; }
+    var buf: buffer.Buffer = decoded.ok;
+    if (buf.frames != 1)       { ret 1; }
     if (buf.samples[0] != 0.5) { ret 1; }
 
-    if (!buffer.dnit(?buf)) { ret 1; }
+    if (!released(buffer.dnit(?buf))) { ret 1; }
     ret 0;
 }
 
@@ -433,9 +474,9 @@ test "wav: truncated data chunk is rejected" {
     o = le16(?b[0], o, 0);
     o = le16(?b[0], o, 0);
 
-    val res: Result[buffer.Buffer, str] = decode(?a, ?b[0], o);
-    if (is_err[buffer.Buffer, str](res)) { ret 0; }
-    ret 1;
+    val decoded: res[buffer.Buffer, DecodeError] = decode(?a, ?b[0], o);
+    if (!(sel decoded.err && sel decoded.err.truncated_chunk)) { ret 1; }
+    ret 0;
 }
 
 test "wav: zero sample rate is rejected" {
@@ -449,25 +490,27 @@ test "wav: zero sample rate is rejected" {
     o = le16(?b[0], o, 0);
     o = le16(?b[0], o, 0);
 
-    val res: Result[buffer.Buffer, str] = decode(?a, ?b[0], 52);
-    if (is_err[buffer.Buffer, str](res)) { ret 0; }
-    ret 1;
+    val decoded: res[buffer.Buffer, DecodeError] = decode(?a, ?b[0], 52);
+    if (!(sel decoded.err && sel decoded.err.zero_rate)) { ret 1; }
+    ret 0;
 }
 
 test "wav: non-riff input is rejected" {
     var a: allo.Allocator;
     page.make(?a);
-    var b: [12]u8 = [12]u8{'J', 'U', 'N', 'K', 0, 0, 0, 0, 'W', 'A', 'V', 'E'};
-    if (is_err[buffer.Buffer, str](decode(?a, ?b[0], 12))) { ret 0; }
-    ret 1;
+    var b:       [12]u8                          = [12]u8{'J', 'U', 'N', 'K', 0, 0, 0, 0, 'W', 'A', 'V', 'E'};
+    val decoded: res[buffer.Buffer, DecodeError] = decode(?a, ?b[0], 12);
+    if (!(sel decoded.err && sel decoded.err.not_riff)) { ret 1; }
+    ret 0;
 }
 
 test "wav: too-short input is rejected" {
     var a: allo.Allocator;
     page.make(?a);
-    var b: [4]u8 = [4]u8{'R', 'I', 'F', 'F'};
-    if (is_err[buffer.Buffer, str](decode(?a, ?b[0], 4))) { ret 0; }
-    ret 1;
+    var b:       [4]u8                           = [4]u8{'R', 'I', 'F', 'F'};
+    val decoded: res[buffer.Buffer, DecodeError] = decode(?a, ?b[0], 4);
+    if (!(sel decoded.err && sel decoded.err.truncated_header)) { ret 1; }
+    ret 0;
 }
 
 test "wav: unsupported bit depth is rejected" {
@@ -476,8 +519,45 @@ test "wav: unsupported bit depth is rejected" {
     # 8-bit PCM is not supported.
     var b: [46]u8;
     var o: usize = write_header(?b[0], FORMAT_PCM, 1, 44100, 8, 2);
-    b[o] = 0x80; o = o + 1;
-    b[o] = 0x80; o = o + 1;
-    if (is_err[buffer.Buffer, str](decode(?a, ?b[0], o))) { ret 0; }
-    ret 1;
+    b[o] = 0x80;
+    o    = o + 1;
+    b[o] = 0x80;
+    o    = o + 1;
+    val decoded: res[buffer.Buffer, DecodeError] = decode(?a, ?b[0], o);
+    if (!(sel decoded.err && (sel decoded.err.bits && decoded.err.bits == 8))) { ret 1; }
+    ret 0;
+}
+
+test "wav: unsupported channel count and format carry the offending value" {
+    var a: allo.Allocator;
+    page.make(?a);
+
+    var b:        [52]u8;
+    var o:        usize                           = write_header(?b[0], FORMAT_PCM, 3, 44100, 16, 6);
+    val surround: res[buffer.Buffer, DecodeError] = decode(?a, ?b[0], 50);
+    if (!(sel surround.err && (sel surround.err.channels && surround.err.channels == 3))) { ret 1; }
+
+    o = write_header(?b[0], 2, 1, 44100, 16, 8);
+    val adpcm: res[buffer.Buffer, DecodeError] = decode(?a, ?b[0], 52);
+    if (!(sel adpcm.err && (sel adpcm.err.format && adpcm.err.format == 2))) { ret 2; }
+    ret 0;
+}
+
+test "wav: missing chunks and nil input are rejected" {
+    var a: allo.Allocator;
+    page.make(?a);
+
+    val absent: res[buffer.Buffer, DecodeError] = decode(?a, nil, 64);
+    if (!(sel absent.err && sel absent.err.nil_input)) { ret 1; }
+
+    # a bare RIFF/WAVE header with no chunks after it.
+    var b:     [12]u8                          = [12]u8{'R', 'I', 'F', 'F', 4, 0, 0, 0, 'W', 'A', 'V', 'E'};
+    val empty: res[buffer.Buffer, DecodeError] = decode(?a, ?b[0], 12);
+    if (!(sel empty.err && sel empty.err.no_fmt)) { ret 2; }
+    ret 0;
+}
+
+# true when a release completed. test fixture
+fun released(r: err[allo.Error]) bool {
+    ret sel r.ok;
 }

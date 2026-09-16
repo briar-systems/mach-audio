@@ -9,28 +9,35 @@
 # the audio thread only pulls from that finished buffer - so the render callback
 # never allocates or locks, honoring the real-time contract in audio.device.
 
+use std.collections.vector.Vector;
 use std.runtime;
-use std.types.result.Result;
-use std.types.result.is_ok;
-use std.types.result.is_err;
-use std.types.result.unwrap_ok;
-use std.types.result.unwrap_err;
-use std.types.bool.bool;
 use std.types.bool.false;
+use std.types.error.err;
+use std.types.result.res;
 use std.types.size.usize;
 use std.types.string.str;
 
-use print: std.print;
-use allo:  std.allocator;
-use page:  std.allocator.page;
-use fs:    std.filesystem;
-use os:    std.system.os;
-use audio;
+use allo: std.allocator;
+use std.allocator.page;
+use std.collections.vector;
+use fs: std.filesystem;
+use std.print;
+use std.system.os;
+# the full path, since a bare `use audio;` here would bind this artifact's own entry.
+use audio.audio;
 
 # audio-thread render callback: pull the next frames from the borrowed Stream.
 # real-time safe - no allocation, no locks (audio.stream.pull guarantees it).
 fun render(out: *f32, frames: u32, channels: u32, user: ptr) {
     audio.pull(user:~*audio.Stream, out, frames, channels);
+}
+
+# the name of the case a failure holds, for a one-line diagnostic
+fun case_name[T](value: T) str {
+    $each case in $cases(T) {
+        if (sel value.[case]) { ret case.name; }
+    }
+    ret "unknown";
 }
 
 #[symbol("main")]
@@ -41,31 +48,36 @@ fun main(argc: i64, argv: **u8) i64 {
     }
     val path: str = argv[1]::str;
 
-    var a: allo.Allocator;
-    page.make(?a);
-
-    val rf: Result[fs.Buffer, str] = fs.read_all_sized(?a, path);
-    if (is_err[fs.Buffer, str](rf)) {
-        print.eprintlnf("cannot read {}: {}", path, unwrap_err[fs.Buffer, str](rf));
+    var a:    allo.Allocator;
+    val made: err[allo.Error] = page.make(?a);
+    if (sel made.err) {
+        print.eprintlnf("cannot create allocator: {}", case_name[allo.Error](made.err));
         ret 1;
     }
-    val fb: fs.Buffer = unwrap_ok[fs.Buffer, str](rf);
 
-    val rd: Result[audio.Buffer, str] = audio.decode(?a, fb.data, fb.len);
-    if (is_err[audio.Buffer, str](rd)) {
-        print.eprintlnf("cannot decode {}: {}", path, unwrap_err[audio.Buffer, str](rd));
+    val rf: res[Vector[u8], fs.FsError] = fs.read_bytes(?a, path);
+    if (sel rf.err) {
+        print.eprintlnf("cannot read {}: {}", path, case_name[fs.FsError](rf.err));
         ret 1;
     }
-    var src: audio.Buffer = unwrap_ok[audio.Buffer, str](rd);
+    var bytes: Vector[u8] = rf.ok;
+
+    val rd: res[audio.Buffer, audio.DecodeError] = audio.decode(?a, bytes.data, bytes.len);
+    vector.dnit[u8](?bytes);
+    if (sel rd.err) {
+        print.eprintlnf("cannot decode {}: {}", path, case_name[audio.DecodeError](rd.err));
+        ret 1;
+    }
+    var src: audio.Buffer = rd.ok;
 
     # mix the decoded source into a device-format buffer (one source at unity
     # gain; more sources plug in the same way).
-    val ro: Result[audio.Buffer, str] = audio.init(?a, src.format, src.frames);
-    if (is_err[audio.Buffer, str](ro)) {
-        print.eprintlnf("out of memory: {}", unwrap_err[audio.Buffer, str](ro));
+    val ro: res[audio.Buffer, audio.BufferError] = audio.init(?a, src.format, src.frames);
+    if (sel ro.err) {
+        print.eprintlnf("cannot allocate the mix: {}", case_name[audio.BufferError](ro.err));
         ret 1;
     }
-    var out: audio.Buffer = unwrap_ok[audio.Buffer, str](ro);
+    var out: audio.Buffer = ro.ok;
 
     var sources: [1]audio.Source;
     sources[0].samples = src.samples;
@@ -74,19 +86,19 @@ fun main(argc: i64, argv: **u8) i64 {
 
     var s: audio.Stream = audio.stream_over(?out, false);
 
-    val rdev: Result[audio.Device, str] = audio.open(out.format, render, (?s):~ptr);
-    if (is_err[audio.Device, str](rdev)) {
-        print.eprintlnf("cannot open device: {}", unwrap_err[audio.Device, str](rdev));
+    val rdev: res[audio.Device, audio.DeviceError] = audio.open(out.format, render, (?s):~ptr);
+    if (sel rdev.err) {
+        print.eprintlnf("cannot open device: {}", case_name[audio.DeviceError](rdev.err));
         ret 1;
     }
-    var dev: audio.Device = unwrap_ok[audio.Device, str](rdev);
+    var dev: audio.Device = rdev.ok;
 
     print.printlnf("playing {} ({} Hz, {} ch, {} frames)",
         path, out.format.sample_rate, out.format.channels::u32, out.frames::u32);
 
-    val rstart: Result[bool, str] = audio.start(?dev);
-    if (is_err[bool, str](rstart)) {
-        print.eprintlnf("cannot start device: {}", unwrap_err[bool, str](rstart));
+    val rstart: err[audio.DeviceError] = audio.start(?dev);
+    if (sel rstart.err) {
+        print.eprintlnf("cannot start device: {}", case_name[audio.DeviceError](rstart.err));
         audio.close(?dev);
         ret 1;
     }
