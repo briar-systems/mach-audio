@@ -136,7 +136,7 @@ run`) compiles the vendored translation unit and links it in one pass — there 
 no separate shim build and no `-L` flag. A consumer that pulls mach-audio
 inherits the step and the platform libs automatically and builds the vendored
 object the same way; `mach` cannot compile the C for them. The pure-Mach modules
-never call into the shim. mach-audio requires Mach 5.0 and std 2.1.
+never call into the shim. mach-audio requires Mach 5.2 and std 4.0.
 
 [`tools/build-miniaudio.sh`](tools/build-miniaudio.sh) selects only the intended
 backend family plus the null backend used by the lifecycle probe. Linux builds
