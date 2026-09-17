@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- license: Copyright is held by Briar Systems LLC (#41).
+
 ## [0.6.1] - 2026-09-16
 
 ### Changed
