@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-09-16
+
+### Changed
+- build: Require std 4.0 and Mach 5.2. No public type changes, since the std
+  types this library exposes are unchanged in 4.0 (#35).
+
 ## [0.6.0] - 2026-09-16
 
 ### Changed
