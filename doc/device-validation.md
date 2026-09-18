@@ -8,6 +8,9 @@ It does not prove that samples reached a physical output.
 Normal `audio.open` rejects the null backend. A successful `play` run therefore
 proves that one of the real backends compiled for that target initialized.
 
+The checklist below is the harness run used when a defect report needs one.
+It is not the bar for claiming support, which the last section states.
+
 ## Hardware checklist
 
 Use a short, known-good PCM WAV and test both profiles on the physical machine:
@@ -55,5 +58,11 @@ Target-specific checks:
 |---|---|---|---|---|---|---|
 | 2026-08-05 | Linux x86_64, PipeWire 1.6.8 with PulseAudio compatibility | SteelSeries Arctis Nova Pro Wireless USB default sink | open/start/stop passed | open/start/stop passed | not independently observed | `/usr/share/sounds/alsa/Front_Center.wav`; process ran for the source duration and exited 0 |
 | 2026-08-05 | Wine 11.14 on Linux | Wine WASAPI | open/start/stop passed | open/start/stop passed | not a physical Windows validation | only WASAPI and null were compiled; normal playback rejects null |
-| pending | Physical Windows x86_64 | WASAPI / record device | pending | pending | pending | required before claiming Windows hardware support |
-| pending | Physical Intel macOS | CoreAudio / record device | pending | pending | pending | required before claiming macOS hardware support |
+| 2026-09-18 | Physical Windows x86_64 | WASAPI | not run by the harness | not run by the harness | confirmed by users in real use, not by the repo's own device harness | owner ruling 2026-09-18, see the bar below |
+| 2026-09-18 | Physical Intel macOS | CoreAudio | not run by the harness | not run by the harness | confirmed by users in real use, not by the repo's own device harness | owner ruling 2026-09-18, see the bar below |
+
+## Support bar
+
+User-reported playback counts as support. A device-harness run on physical
+hardware is added when a defect report needs one, and that report opens its
+own fix issue with the evidence attached.
