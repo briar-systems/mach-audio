@@ -1,7 +1,7 @@
 [project]
 id = "audio-consumer"
 version = "0.0.0"
-mach = "^5.8.0"
+mach = "^5.8.1"
 src = "src"
 out = "out/{target.name}/{profile.name}"
 
