@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- test: The `test/consumer` fixture declares std by range, `version = "^5.7.1"`,
+  pinned by its own committed `test/consumer/dep/std` gitlink, and requires
+  Mach 5.8.1, where `mach dep pull` initializes a nested gitlink from a range.
+  The root's compiler range is unchanged (#55).
+
 ## [0.7.0] - 2026-09-19
 
 ### Changed
