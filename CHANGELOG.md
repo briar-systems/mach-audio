@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-09-19
+
 ### Changed
 - build: Require std 5.7 and Mach 5.5.2. A root project pinning std 5.x
   overrides every dependency's std, so a library left on std 4 no longer
