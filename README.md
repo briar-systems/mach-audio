@@ -136,7 +136,7 @@ run`) compiles the vendored translation unit and links it in one pass — there 
 no separate shim build and no `-L` flag. A consumer that pulls mach-audio
 inherits the step and the platform libs automatically and builds the vendored
 object the same way; `mach` cannot compile the C for them. The pure-Mach modules
-never call into the shim. mach-audio requires Mach 5.5.2 and std 5.7.
+never call into the shim. mach-audio requires Mach 5.9 and std 6.0.
 
 [`tools/build-miniaudio.sh`](tools/build-miniaudio.sh) selects only the intended
 backend family plus the null backend used by the lifecycle probe. Linux builds
@@ -193,5 +193,7 @@ current evidence ledger live in
 
 The external fixture is its own root: `mach dep pull test/consumer` realizes a
 flat `dep/` holding a copy of this project and the std it selects, rather than
-sharing the repository's `dep/std` gitlink. This makes it exercise the exported
-native build and link cascade from an independent consumer graph.
+sharing the repository's `dep/std` gitlink. Like the root, it declares std by
+range and pins it with its own committed `test/consumer/dep/std` gitlink, so a
+std bump touches both gitlinks. This makes it exercise the exported native
+build and link cascade from an independent consumer graph.

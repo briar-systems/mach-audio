@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-09-19
+
+### Changed
+- build: Require std 6.0 and Mach 5.9. std is declared `version = "^6.0"` in
+  the root and in `test/consumer`, each pinned at v6.0.0 by its committed
+  gitlink. No source change was needed: std 6.0 reshapes `sort`, `heap`,
+  `map`, `set`, `crypto.ct` and `buffers.open_account`, none of which this
+  library uses, and the std types it exposes are unchanged (#57).
+- test: The `test/consumer` fixture declares std by range like the root,
+  pinned by its own committed `test/consumer/dep/std` gitlink, instead of an
+  exact tag. `mach dep pull` initializes a nested gitlink from a range since
+  Mach 5.8.1 (#55).
+
 ## [0.7.0] - 2026-09-19
 
 ### Changed

@@ -1,4 +1,5 @@
 out/
 
-# consumer dependencies realized by `mach dep pull test/consumer`
-test/consumer/dep/
+# the consumer's path copy of this library, realized by `mach dep pull test/consumer`.
+# its std pin is the committed test/consumer/dep/std gitlink, like the root's
+test/consumer/dep/audio/
