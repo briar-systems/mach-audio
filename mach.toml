@@ -255,5 +255,5 @@ out  = [
 need = []
 
 [dep.std]
-git = "https://github.com/briar-systems/mach-std"
-ref = "tag/v5.7.1"
+git     = "https://github.com/briar-systems/mach-std"
+version = "^5.7.1"
