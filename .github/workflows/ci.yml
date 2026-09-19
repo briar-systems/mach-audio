@@ -3,10 +3,16 @@ name: CI
 # the family's tiered pipeline (briar-systems/.github mach-lib.yml). a pull
 # request into dev runs the linux leg, a pull request into main runs every leg.
 # test/consumer links the library the way an external project does, and the
-# per-leg checks on it live in .github/ci. nothing runs on push.
+# per-leg checks on it live in .github/ci. cd.yml calls this with heavy
+# all on a tag. nothing runs on push.
 
 on:
   pull_request:
+  workflow_call:
+    inputs:
+      heavy:
+        type: string
+        default: none
   workflow_dispatch:
     inputs:
       heavy:

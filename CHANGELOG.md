@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-09-19
+
+### Changed
+- build: Require std 5.7 and Mach 5.5.2. std is declared by range,
+  `version = "^5.7.1"`, with the `dep/std` gitlink as the pin, so a later
+  std minor resolves beside a root that declares one. A root project pinning std 5.x
+  overrides every dependency's std, so a library left on std 4 no longer
+  resolves under it. No source change was needed: the library's own
+  `mixer.Source` is unrelated to std's `buffers.Source`, and nothing here uses
+  `std.time`. The std types this library exposes are unchanged (#49).
+- license: Copyright is held by Briar Systems LLC (#41).
+- build: Declare the compiler range in `[project].mach`, first as `^5.3` (#43),
+  now `^5.5.2` (#49).
+
 ## [0.6.1] - 2026-09-16
 
 ### Changed

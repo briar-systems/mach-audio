@@ -136,7 +136,7 @@ run`) compiles the vendored translation unit and links it in one pass — there 
 no separate shim build and no `-L` flag. A consumer that pulls mach-audio
 inherits the step and the platform libs automatically and builds the vendored
 object the same way; `mach` cannot compile the C for them. The pure-Mach modules
-never call into the shim. mach-audio requires Mach 5.2 and std 4.0.
+never call into the shim. mach-audio requires Mach 5.5.2 and std 5.7.
 
 [`tools/build-miniaudio.sh`](tools/build-miniaudio.sh) selects only the intended
 backend family plus the null backend used by the lifecycle probe. Linux builds
@@ -173,8 +173,8 @@ hosted null-device run is never presented as a physical speaker test.
 | Target | ISA | Device backend | Automated validation | Physical hardware |
 |---|---|---|---|---|
 | linux | x86_64 | ALSA / PulseAudio / JACK | native build, 49 tests, external lifecycle probe | default PipeWire output opened/started/stopped in debug and release; audible result not independently asserted |
-| windows | x86_64 | WASAPI | Linux cross-link, 49 native tests, exact PE inspection, external lifecycle probe | pending |
-| darwin | x86_64 | CoreAudio | native Intel build, 49 tests, exact Mach-O inspection, external lifecycle probe | pending |
+| windows | x86_64 | WASAPI | Linux cross-link, 49 native tests, exact PE inspection, external lifecycle probe | confirmed by users in real use, not by the repo's own device harness (2026-09-18) |
+| darwin | x86_64 | CoreAudio | native Intel build, 49 tests, exact Mach-O inspection, external lifecycle probe | confirmed by users in real use, not by the repo's own device harness (2026-09-18) |
 
 ## Tests
 
