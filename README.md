@@ -193,5 +193,7 @@ current evidence ledger live in
 
 The external fixture is its own root: `mach dep pull test/consumer` realizes a
 flat `dep/` holding a copy of this project and the std it selects, rather than
-sharing the repository's `dep/std` gitlink. This makes it exercise the exported
-native build and link cascade from an independent consumer graph.
+sharing the repository's `dep/std` gitlink. Like the root, it declares std by
+range and pins it with its own committed `test/consumer/dep/std` gitlink, so a
+std bump touches both gitlinks. This makes it exercise the exported native
+build and link cascade from an independent consumer graph.

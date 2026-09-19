@@ -1,7 +1,7 @@
 [project]
 id = "audio-consumer"
 version = "0.0.0"
-mach = "^5.5.2"
+mach = "^5.8.0"
 src = "src"
 out = "out/{target.name}/{profile.name}"
 
@@ -55,7 +55,6 @@ need = []
 [dep.audio]
 path = "../.."
 
-# exact tag until mach dep pull initializes a nested gitlink from a range (briar-systems/mach#3686)
 [dep.std]
 git = "https://github.com/briar-systems/mach-std"
-ref = "tag/v5.7.1"
+version = "^5.7.1"
