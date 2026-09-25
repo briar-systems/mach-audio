@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-09-25
+
 ### Changed
 - layout: The library surface moves from `src/audio.mach` to
   `src/lib/audio.mach`, following the family layout for artifact entries
