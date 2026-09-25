@@ -16,11 +16,11 @@ It is not the bar for claiming support, which the last section states.
 Use a short, known-good PCM WAV and test both profiles on the physical machine:
 
 ```sh
-mach dep pull .
-mach build . --profile debug
-mach build . --profile release
-./out/<target>/debug/bin/play sample.wav
-./out/<target>/release/bin/play sample.wav
+mach dep pull demo/play
+mach build demo/play --profile debug
+mach build demo/play --profile release
+./demo/play/out/<target>/debug/bin/play sample.wav
+./demo/play/out/<target>/release/bin/play sample.wav
 ```
 
 On Windows, the executable path is `bin/play.exe`.

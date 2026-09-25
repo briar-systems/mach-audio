@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-09-25
+
+### Changed
+- layout: The library surface moves from `src/audio.mach` to
+  `src/lib/audio.mach`, following the family layout for artifact entries
+  (#65). A bare `use audio;` is unaffected, since it binds the default
+  artifact's entry wherever that lives, and every other module path
+  (`audio.buffer`, `audio.mix`, `audio.device`, ...) is unchanged. The entry
+  module's own full path becomes `audio.lib.audio` in place of `audio.audio`.
+  `src/lib/` is the artifact that builds a compiled library to ship, not the
+  surface a direct dependency names, so a consumer imports the bare
+  `use audio;`. `mach test . --list` collects the same 49 tests as before.
+- play: The `play` example leaves the library for `demo/play/`, its own project
+  with its own std pin and a path dependency on the repository root, so the
+  library declares no binary (#65). `[artifact.play]` and
+  `[artifact.play-windows]` are gone, and the one `[artifact.play]` in the
+  example's manifest writes `bin/play` or, on windows, `bin/play.exe` through
+  `{artifact.suffix}`. It imports the bare `use audio;` like any consumer. The
+  miniaudio object and every platform link stay with the library and cascade
+  to consumers as before, so a consumer still declares nothing beyond the
+  dependency. `mach run . --bin play` becomes `mach run demo/play`. CI builds
+  the example as a subproject on every leg beside `test/consumer` and runs the
+  same PE and Mach-O checks on it.
+
+### Fixed
+- readme: The dependency stanza selects releases with `version = "^0.9.0"`, as
+  `mach dep add` writes it, in place of following `branch/main`, and shows the
+  `mach dep add` command first. The requirement line names Mach 5.12 and std
+  8.1 in place of the stale Mach 5.9 and std 6.0 (#61).
+
 ## [0.9.0] - 2026-09-25
 
 ### Changed

@@ -3,3 +3,6 @@ out/
 # the consumer's path copy of this library, realized by `mach dep pull test/consumer`.
 # its std pin is the committed test/consumer/dep/std gitlink, like the root's
 test/consumer/dep/audio/
+
+# the demo's own std clone and its path copy of this library, realized by `mach dep pull demo/play`
+demo/play/dep/

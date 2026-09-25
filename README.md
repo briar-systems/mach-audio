@@ -15,12 +15,20 @@ fun master(a: f32, b: f32, trim: f32) f32 {
 }
 ```
 
-Consuming projects vendor mach-audio as a normal Mach dependency:
+Consuming projects vendor mach-audio as a normal Mach dependency. Add it with
+`mach dep add`, which declares the dependency at a caret range over the newest
+compatible release and realizes it:
+
+```sh
+mach dep add . audio --git https://github.com/briar-systems/mach-audio
+```
+
+That writes this stanza to `mach.toml`:
 
 ```toml
 [dep.audio]
 git = "https://github.com/briar-systems/mach-audio"
-ref = "branch/main"
+version = "^0.9.0"
 ```
 
 ## Status
@@ -112,9 +120,19 @@ The design is a plain callback hook (no ring buffer): the pure mixer already
 renders synchronously and allocation-free, so a buffer-and-producer-thread
 would only add latency.
 
-The full decode-to-speakers path lives in [`src/play.mach`](src/play.mach); run
-it with `mach run . --bin play -- some.wav`. On Windows, use the platform's
-extension-specific artifact: `mach run . --bin play-windows -- some.wav`.
+The full decode-to-speakers path lives in the `play` example,
+[`demo/play`](demo/play), its own project that consumes this library through a
+path dependency on the repository root, beside its own pin of std. The library
+declares no binary. Build and run it from the repository root:
+
+```sh
+mach dep pull demo/play
+mach build demo/play
+mach run demo/play -- some.wav
+```
+
+A path dependency is a copy, so run `mach dep pull demo/play` again after
+changing the library.
 
 Normal playback refuses miniaudio's null backend. A successful `audio.open` or
 `play` run therefore means that a real platform backend initialized; a machine
@@ -136,7 +154,7 @@ run`) compiles the vendored translation unit and links it in one pass — there 
 no separate shim build and no `-L` flag. A consumer that pulls mach-audio
 inherits the step and the platform libs automatically and builds the vendored
 object the same way; `mach` cannot compile the C for them. The pure-Mach modules
-never call into the shim. mach-audio requires Mach 5.9 and std 6.0.
+never call into the shim. mach-audio requires Mach 5.12 and std 8.1.
 
 [`tools/build-miniaudio.sh`](tools/build-miniaudio.sh) selects only the intended
 backend family plus the null backend used by the lifecycle probe. Linux builds
@@ -195,5 +213,5 @@ The external fixture is its own root: `mach dep pull test/consumer` realizes a
 flat `dep/` holding a copy of this project and the std it selects, rather than
 sharing the repository's `dep/std` gitlink. Like the root, it declares std by
 range and pins it with its own committed `test/consumer/dep/std` gitlink, so a
-std bump touches both gitlinks. This makes it exercise the exported native
+std bump touches both gitlinks and the `ref` tag `demo/play` pins. This makes it exercise the exported native
 build and link cascade from an independent consumer graph.

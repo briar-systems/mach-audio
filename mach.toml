@@ -1,6 +1,6 @@
 [project]
 id      = "audio"
-version = "0.9.0"
+version = "0.9.1"
 mach    = "^5.12"
 src     = "src"
 out     = "out/{target.name}/{profile.name}"
@@ -38,36 +38,10 @@ float_reassoc = false
 
 [artifact.audio]
 kind    = "static"
-entry   = "audio.mach"
+entry   = "lib/audio.mach"
 out     = "lib/audio"
 default = true
 targets = ["*"]
-link    = [
-    "miniaudio-local", "mingw32", "compiler-rt",
-    "pthread", "m", "dl", "rt",
-    "kernel32", "ucrt-heap", "ucrt-string", "ucrt-stdio",
-    "libSystem", "CoreFoundation", "CoreAudio", "AudioToolbox",
-]
-need    = []
-
-[artifact.play]
-kind    = "bin"
-entry   = "play.mach"
-out     = "bin/play"
-targets = ["linux-x86_64", "darwin"]
-link    = [
-    "miniaudio-local", "mingw32", "compiler-rt",
-    "pthread", "m", "dl", "rt",
-    "kernel32", "ucrt-heap", "ucrt-string", "ucrt-stdio",
-    "libSystem", "CoreFoundation", "CoreAudio", "AudioToolbox",
-]
-need    = []
-
-[artifact.play-windows]
-kind    = "bin"
-entry   = "play.mach"
-out     = "bin/play.exe"
-targets = ["windows"]
 link    = [
     "miniaudio-local", "mingw32", "compiler-rt",
     "pthread", "m", "dl", "rt",
