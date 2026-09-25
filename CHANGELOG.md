@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-09-25
+
 ### Changed
 - build: **Breaking.** Require std 8.1 and Mach 5.12. std is declared
   `version = "^8.1"` in the root and in `test/consumer`, each pinned at v8.1.0
