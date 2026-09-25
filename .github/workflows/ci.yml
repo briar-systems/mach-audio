@@ -2,9 +2,9 @@ name: CI
 
 # the family's tiered pipeline (briar-systems/.github mach-lib.yml). a pull
 # request into dev runs the linux leg, a pull request into main runs every leg.
-# test/consumer links the library the way an external project does, and the
-# per-leg checks on it live in .github/ci. cd.yml calls this with heavy
-# all on a tag. nothing runs on push.
+# test/consumer and the demo/play example link the library the way an external
+# project does, and the per-leg checks on them live in .github/ci. cd.yml calls
+# this with heavy all on a tag. nothing runs on push.
 
 on:
   pull_request:
@@ -41,7 +41,11 @@ jobs:
           "target": "windows"},
          {"name": "x86_64-darwin", "runs-on": "macos-15-intel", "tier": "heavy",
           "target": "darwin"}]
-      subprojects: '[{"path": "test/consumer", "build": true, "test": false}]'
+      # the play example is its own project, so every profile builds it on every
+      # leg beside the consumer, and verify.sh checks both
+      subprojects: >-
+        [{"path": "test/consumer", "build": true, "test": false},
+         {"path": "demo/play", "build": true, "test": false}]
 
   gate:
     if: always()

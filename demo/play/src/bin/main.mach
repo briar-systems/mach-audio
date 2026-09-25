@@ -2,7 +2,7 @@
 #
 # the end-to-end path the library exists for: read bytes -> audio.decode (pure
 # WAV) -> audio.mix (pure mixer) -> audio.stream + audio.open (device). run it
-# with `make play WAV=path/to/file.wav` or `mach run . --bin play -- file.wav`.
+# from the repository root with `mach run demo/play -- file.wav`.
 # needs a machine with an audio device; it cannot run in headless CI.
 #
 # the mixing is done once on the main thread into a device-format buffer, and
@@ -17,14 +17,13 @@ use std.types.result.res;
 use std.types.size.usize;
 use std.types.string.str;
 
+use audio;
 use allo: std.allocator;
 use std.allocator.page;
 use std.collections.vector;
 use fs: std.filesystem;
 use std.print;
 use std.system.os;
-# the full path, since a bare `use audio;` here would bind this artifact's own entry.
-use audio.lib.audio;
 
 # audio-thread render callback: pull the next frames from the borrowed Stream.
 # real-time safe - no allocation, no locks (audio.stream.pull guarantees it).

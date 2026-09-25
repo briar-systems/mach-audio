@@ -120,9 +120,19 @@ The design is a plain callback hook (no ring buffer): the pure mixer already
 renders synchronously and allocation-free, so a buffer-and-producer-thread
 would only add latency.
 
-The full decode-to-speakers path lives in [`src/play.mach`](src/play.mach); run
-it with `mach run . --bin play -- some.wav`. On Windows, use the platform's
-extension-specific artifact: `mach run . --bin play-windows -- some.wav`.
+The full decode-to-speakers path lives in the `play` example,
+[`demo/play`](demo/play), its own project that consumes this library through a
+path dependency on the repository root, beside its own pin of std. The library
+declares no binary. Build and run it from the repository root:
+
+```sh
+mach dep pull demo/play
+mach build demo/play
+mach run demo/play -- some.wav
+```
+
+A path dependency is a copy, so run `mach dep pull demo/play` again after
+changing the library.
 
 Normal playback refuses miniaudio's null backend. A successful `audio.open` or
 `play` run therefore means that a real platform backend initialized; a machine
@@ -203,5 +213,5 @@ The external fixture is its own root: `mach dep pull test/consumer` realizes a
 flat `dep/` holding a copy of this project and the std it selects, rather than
 sharing the repository's `dep/std` gitlink. Like the root, it declares std by
 range and pins it with its own committed `test/consumer/dep/std` gitlink, so a
-std bump touches both gitlinks. This makes it exercise the exported native
+std bump touches both gitlinks and the `ref` tag `demo/play` pins. This makes it exercise the exported native
 build and link cascade from an independent consumer graph.
