@@ -24,7 +24,7 @@ use fs: std.filesystem;
 use std.print;
 use std.system.os;
 # the full path, since a bare `use audio;` here would bind this artifact's own entry.
-use audio.audio;
+use audio.lib.audio;
 
 # audio-thread render callback: pull the next frames from the borrowed Stream.
 # real-time safe - no allocation, no locks (audio.stream.pull guarantees it).

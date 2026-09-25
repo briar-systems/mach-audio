@@ -38,7 +38,7 @@ float_reassoc = false
 
 [artifact.audio]
 kind    = "static"
-entry   = "audio.mach"
+entry   = "lib/audio.mach"
 out     = "lib/audio"
 default = true
 targets = ["*"]
