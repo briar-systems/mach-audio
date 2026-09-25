@@ -5,6 +5,16 @@ set -euo pipefail
 
 consumer=test/consumer/out
 
+# mach 5.12 builds only the default artifact, so the play example is selected
+# here, on every leg as before, for the checks below
+case "$MACH_CI_TARGET" in
+  windows) play=play-windows ;;
+  *) play=play ;;
+esac
+for profile in $MACH_CI_PROFILES; do
+  "$MACH_COMPILER" build . --bin "$play" --profile "$profile" --target "$MACH_CI_TARGET"
+done
+
 # the consumer prints one success line when it can open and drive the library
 smoke() {
   "$1" | tee "$2"
