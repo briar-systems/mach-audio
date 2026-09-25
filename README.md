@@ -15,12 +15,20 @@ fun master(a: f32, b: f32, trim: f32) f32 {
 }
 ```
 
-Consuming projects vendor mach-audio as a normal Mach dependency:
+Consuming projects vendor mach-audio as a normal Mach dependency. Add it with
+`mach dep add`, which declares the dependency at a caret range over the newest
+compatible release and realizes it:
+
+```sh
+mach dep add . audio --git https://github.com/briar-systems/mach-audio
+```
+
+That writes this stanza to `mach.toml`:
 
 ```toml
 [dep.audio]
 git = "https://github.com/briar-systems/mach-audio"
-ref = "branch/main"
+version = "^0.9.0"
 ```
 
 ## Status
@@ -136,7 +144,7 @@ run`) compiles the vendored translation unit and links it in one pass — there 
 no separate shim build and no `-L` flag. A consumer that pulls mach-audio
 inherits the step and the platform libs automatically and builds the vendored
 object the same way; `mach` cannot compile the C for them. The pure-Mach modules
-never call into the shim. mach-audio requires Mach 5.9 and std 6.0.
+never call into the shim. mach-audio requires Mach 5.12 and std 8.1.
 
 [`tools/build-miniaudio.sh`](tools/build-miniaudio.sh) selects only the intended
 backend family plus the null backend used by the lifecycle probe. Linux builds
