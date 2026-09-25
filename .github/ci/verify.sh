@@ -1,19 +1,11 @@
 #!/usr/bin/env bash
-# per-leg checks on the library and on test/consumer, which links it the way
-# an external project does
+# per-leg checks on test/consumer and demo/play, which link the library the way
+# an external project does. the subprojects phase already built both in every
+# profile, since the library declares no binary
 set -euo pipefail
 
 consumer=test/consumer/out
-
-# mach 5.12 builds only the default artifact, so the play example is selected
-# here, on every leg as before, for the checks below
-case "$MACH_CI_TARGET" in
-  windows) play=play-windows ;;
-  *) play=play ;;
-esac
-for profile in $MACH_CI_PROFILES; do
-  "$MACH_COMPILER" build . --bin "$play" --profile "$profile" --target "$MACH_CI_TARGET"
-done
+play=demo/play/out
 
 # the consumer prints one success line when it can open and drive the library
 smoke() {
@@ -25,8 +17,8 @@ smoke() {
 pe_check() {
   for profile in $MACH_CI_PROFILES; do
     tools/check-windows-pe.sh \
-      "out/windows/$profile/vendor/miniaudio/miniaudio.o" \
-      "out/windows/$profile/bin/play.exe" \
+      "$play/windows/$profile/vendor/miniaudio/miniaudio.o" \
+      "$play/windows/$profile/bin/play.exe" \
       "$consumer/windows/$profile/bin/audio-consumer.exe"
     echo "windows $profile: PE imports and relocations ok"
   done
@@ -59,8 +51,8 @@ case "$MACH_CI_LEG" in
     done
     for profile in $MACH_CI_PROFILES; do
       tools/check-darwin-macho.sh \
-        "out/darwin/$profile/vendor/miniaudio/miniaudio.o" \
-        "out/darwin/$profile/bin/play" \
+        "$play/darwin/$profile/vendor/miniaudio/miniaudio.o" \
+        "$play/darwin/$profile/bin/play" \
         "$consumer/darwin/$profile/bin/audio-consumer"
       echo "darwin $profile: Mach-O imports ok"
     done
