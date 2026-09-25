@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-09-25
+
+### Changed
+- build: **Breaking.** Require std 8.1 and Mach 5.12. std is declared
+  `version = "^8.1"` in the root and in `test/consumer`, each pinned at v8.1.0
+  by its committed gitlink, and `[project].mach` is `^5.12`. Resolution is
+  flat, so a consumer must move to std 8 and Mach 5.12 with this release, and
+  anything that links std has to be rebuilt. 8.1 is the floor because std 7.5
+  through 8.0 overwrite libc's thread pointer at startup, which crashes
+  miniaudio in `malloc` on linux (briar-systems/mach-std#915). No source
+  change was needed, and the std types this library exposes are unchanged
+  (#62).
+- ci: Seed Mach v5.12.0 on every leg, ahead of the family default. Mach 5.12
+  builds only the default artifact, so the verify hook selects the `play`
+  example with `--bin` on every leg, as the plain build did before (#62).
+
 ## [0.8.0] - 2026-09-19
 
 ### Changed
