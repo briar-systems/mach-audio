@@ -17,7 +17,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   miniaudio in `malloc` on linux (briar-systems/mach-std#915). No source
   change was needed, and the std types this library exposes are unchanged
   (#62).
-- ci: Seed Mach v5.12.0 on every leg, ahead of the family default (#62).
+- ci: Seed Mach v5.12.0 on every leg, ahead of the family default. Mach 5.12
+  builds only the default artifact, so the verify hook selects the `play`
+  example with `--bin` on every leg, as the plain build did before (#62).
 
 ## [0.8.0] - 2026-09-19
 
