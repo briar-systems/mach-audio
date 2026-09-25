@@ -1,7 +1,7 @@
 [project]
 id = "audio-consumer"
 version = "0.0.0"
-mach = "^5.9"
+mach = "^5.12"
 src = "src"
 out = "out/{target.name}/{profile.name}"
 
@@ -57,4 +57,4 @@ path = "../.."
 
 [dep.std]
 git = "https://github.com/briar-systems/mach-std"
-version = "^6.0"
+version = "^8.0"
