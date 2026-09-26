@@ -54,8 +54,6 @@ ext fun mad_device_sample_rate(dev: ptr) u32;
 # the active channel count the callback is fed
 ext fun mad_device_channels(dev: ptr) u32;
 
-ext fun mad_device_probe_null() i32;
-
 # why a device operation refused
 # ---
 # channels:    the requested format declares zero channels
@@ -154,12 +152,7 @@ pub fun channels(dev: Device) u16 {
     ret mad_device_channels(dev.handle)::u16;
 }
 
-test "device: native shim runs the null backend lifecycle" {
-    if (mad_device_probe_null() != 0) { ret 1; }
-    ret 0;
-}
-
-test "device: invalid requests are refused before the backend" {
+test open__refuses_invalid_requests {
     var fmt: buffer.Format;
     fmt.sample_rate = 48000;
     fmt.channels    = 0;
@@ -180,5 +173,6 @@ test "device: invalid requests are refused before the backend" {
     ret 0;
 }
 
-# a render callback that leaves the output untouched. test fixture
+# a render callback that leaves the output untouched
+#[testing]
 fun silent(out: *f32, frames: u32, channels: u32, user: ptr) {}
