@@ -10,12 +10,14 @@
 use std.types.bool.bool;
 use std.types.bool.false;
 use std.types.bool.true;
+#[testing]
 use std.types.error.err;
 use std.types.result.res;
 use std.types.size.usize;
 
 use audio.buffer;
 use allo: std.allocator;
+#[testing]
 use std.allocator.page;
 
 # audio format tags carried in the fmt chunk
@@ -211,14 +213,16 @@ pub fun decode(a: *allo.Allocator, data: *u8, len: usize) res[buffer.Buffer, Dec
     ret res[buffer.Buffer, DecodeError].ok{buf};
 }
 
-# write a little-endian u16 to a byte buffer at off; returns off+2. test fixture
+# write a little-endian u16 to a byte buffer at off; returns off+2
+#[testing]
 fun le16(b: *u8, off: usize, v: u32) usize {
     b[off]     = (v & 0xFF)::u8;
     b[off + 1] = ((v >> 8) & 0xFF)::u8;
     ret off + 2;
 }
 
-# write a little-endian u32 to a byte buffer at off; returns off+4. test fixture
+# write a little-endian u32 to a byte buffer at off; returns off+4
+#[testing]
 fun le32(b: *u8, off: usize, v: u32) usize {
     b[off]     = (v & 0xFF)::u8;
     b[off + 1] = ((v >> 8) & 0xFF)::u8;
@@ -227,7 +231,8 @@ fun le32(b: *u8, off: usize, v: u32) usize {
     ret off + 4;
 }
 
-# write a four-byte ascii tag at off; returns off+4. test fixture
+# write a four-byte ascii tag at off; returns off+4
+#[testing]
 fun tag4(b: *u8, off: usize, a: u8, c: u8, d: u8, e: u8) usize {
     b[off]     = a;
     b[off + 1] = c;
@@ -237,7 +242,8 @@ fun tag4(b: *u8, off: usize, a: u8, c: u8, d: u8, e: u8) usize {
 }
 
 # lay down a canonical RIFF/fmt header for a data chunk of
-# data_bytes, returning the offset at the start of sample bytes. test fixture
+# data_bytes, returning the offset at the start of sample bytes
+#[testing]
 fun write_header(b: *u8, format: u32, channels: u32, sample_rate: u32, bits: u32, data_bytes: u32) usize {
     val block_align: u32 = channels * (bits / 8);
     val byte_rate:   u32 = sample_rate * block_align;
@@ -259,7 +265,7 @@ fun write_header(b: *u8, format: u32, channels: u32, sample_rate: u32, bits: u32
     ret o;
 }
 
-test "wav: decode 16-bit stereo PCM" {
+test decode__pcm16_stereo {
     var a: allo.Allocator;
     page.make(?a);
 
@@ -287,7 +293,7 @@ test "wav: decode 16-bit stereo PCM" {
     ret 0;
 }
 
-test "wav: decode 24-bit mono PCM" {
+test decode__pcm24_mono {
     var a: allo.Allocator;
     page.make(?a);
 
@@ -324,7 +330,7 @@ test "wav: decode 24-bit mono PCM" {
     ret 0;
 }
 
-test "wav: decode 32-bit mono PCM" {
+test decode__pcm32_mono {
     var a: allo.Allocator;
     page.make(?a);
 
@@ -345,7 +351,7 @@ test "wav: decode 32-bit mono PCM" {
     ret 0;
 }
 
-test "wav: decode 32-bit float stereo" {
+test decode__float32_stereo {
     var a: allo.Allocator;
     page.make(?a);
 
@@ -367,7 +373,7 @@ test "wav: decode 32-bit float stereo" {
     ret 0;
 }
 
-test "wav: unknown chunks are skipped" {
+test decode__skips_unknown_chunks {
     var a: allo.Allocator;
     page.make(?a);
 
@@ -419,7 +425,7 @@ test "wav: unknown chunks are skipped" {
     ret 0;
 }
 
-test "wav: extensible wrapper resolves to pcm" {
+test decode__extensible_resolves_to_pcm {
     var a: allo.Allocator;
     page.make(?a);
 
@@ -464,100 +470,60 @@ test "wav: extensible wrapper resolves to pcm" {
     ret 0;
 }
 
-test "wav: truncated data chunk is rejected" {
-    var a: allo.Allocator;
-    page.make(?a);
-
-    # header claims 8 data bytes but only 4 follow.
-    var b: [48]u8;
-    var o: usize = write_header(?b[0], FORMAT_PCM, 2, 44100, 16, 8);
-    o = le16(?b[0], o, 0);
-    o = le16(?b[0], o, 0);
-
-    val decoded: res[buffer.Buffer, DecodeError] = decode(?a, ?b[0], o);
-    if (!(sel decoded.err && sel decoded.err.truncated_chunk)) { ret 1; }
-    ret 0;
-}
-
-test "wav: zero sample rate is rejected" {
-    var a: allo.Allocator;
-    page.make(?a);
-
-    var b: [52]u8;
-    var o: usize = write_header(?b[0], FORMAT_PCM, 2, 0, 16, 8);
-    o = le16(?b[0], o, 0);
-    o = le16(?b[0], o, 0);
-    o = le16(?b[0], o, 0);
-    o = le16(?b[0], o, 0);
-
-    val decoded: res[buffer.Buffer, DecodeError] = decode(?a, ?b[0], 52);
-    if (!(sel decoded.err && sel decoded.err.zero_rate)) { ret 1; }
-    ret 0;
-}
-
-test "wav: non-riff input is rejected" {
-    var a: allo.Allocator;
-    page.make(?a);
-    var b:       [12]u8                          = [12]u8{'J', 'U', 'N', 'K', 0, 0, 0, 0, 'W', 'A', 'V', 'E'};
-    val decoded: res[buffer.Buffer, DecodeError] = decode(?a, ?b[0], 12);
-    if (!(sel decoded.err && sel decoded.err.not_riff)) { ret 1; }
-    ret 0;
-}
-
-test "wav: too-short input is rejected" {
-    var a: allo.Allocator;
-    page.make(?a);
-    var b:       [4]u8                           = [4]u8{'R', 'I', 'F', 'F'};
-    val decoded: res[buffer.Buffer, DecodeError] = decode(?a, ?b[0], 4);
-    if (!(sel decoded.err && sel decoded.err.truncated_header)) { ret 1; }
-    ret 0;
-}
-
-test "wav: unsupported bit depth is rejected" {
-    var a: allo.Allocator;
-    page.make(?a);
-    # 8-bit PCM is not supported.
-    var b: [46]u8;
-    var o: usize = write_header(?b[0], FORMAT_PCM, 1, 44100, 8, 2);
-    b[o] = 0x80;
-    o    = o + 1;
-    b[o] = 0x80;
-    o    = o + 1;
-    val decoded: res[buffer.Buffer, DecodeError] = decode(?a, ?b[0], o);
-    if (!(sel decoded.err && (sel decoded.err.bits && decoded.err.bits == 8))) { ret 1; }
-    ret 0;
-}
-
-test "wav: unsupported channel count and format carry the offending value" {
-    var a: allo.Allocator;
-    page.make(?a);
-
-    var b:        [52]u8;
-    var o:        usize                           = write_header(?b[0], FORMAT_PCM, 3, 44100, 16, 6);
-    val surround: res[buffer.Buffer, DecodeError] = decode(?a, ?b[0], 50);
-    if (!(sel surround.err && (sel surround.err.channels && surround.err.channels == 3))) { ret 1; }
-
-    o = write_header(?b[0], 2, 1, 44100, 16, 8);
-    val adpcm: res[buffer.Buffer, DecodeError] = decode(?a, ?b[0], 52);
-    if (!(sel adpcm.err && (sel adpcm.err.format && adpcm.err.format == 2))) { ret 2; }
-    ret 0;
-}
-
-test "wav: missing chunks and nil input are rejected" {
+test decode__rejects_malformed_input {
     var a: allo.Allocator;
     page.make(?a);
 
     val absent: res[buffer.Buffer, DecodeError] = decode(?a, nil, 64);
     if (!(sel absent.err && sel absent.err.nil_input)) { ret 1; }
 
-    # a bare RIFF/WAVE header with no chunks after it.
-    var b:     [12]u8                          = [12]u8{'R', 'I', 'F', 'F', 4, 0, 0, 0, 'W', 'A', 'V', 'E'};
-    val empty: res[buffer.Buffer, DecodeError] = decode(?a, ?b[0], 12);
-    if (!(sel empty.err && sel empty.err.no_fmt)) { ret 2; }
+    var riff:  [4]u8                           = [4]u8{'R', 'I', 'F', 'F'};
+    val short: res[buffer.Buffer, DecodeError] = decode(?a, ?riff[0], 4);
+    if (!(sel short.err && sel short.err.truncated_header)) { ret 2; }
+
+    var junk:    [12]u8                          = [12]u8{'J', 'U', 'N', 'K', 0, 0, 0, 0, 'W', 'A', 'V', 'E'};
+    val foreign: res[buffer.Buffer, DecodeError] = decode(?a, ?junk[0], 12);
+    if (!(sel foreign.err && sel foreign.err.not_riff)) { ret 3; }
+
+    # a bare RIFF/WAVE header with no chunks after it
+    var bare:  [12]u8                          = [12]u8{'R', 'I', 'F', 'F', 4, 0, 0, 0, 'W', 'A', 'V', 'E'};
+    val empty: res[buffer.Buffer, DecodeError] = decode(?a, ?bare[0], 12);
+    if (!(sel empty.err && sel empty.err.no_fmt)) { ret 4; }
+
+    # the data chunk claims 8 bytes but only 4 follow
+    var b: [52]u8;
+    var o: usize = write_header(?b[0], FORMAT_PCM, 2, 44100, 16, 8);
+    o = le32(?b[0], o, 0);
+    val cut: res[buffer.Buffer, DecodeError] = decode(?a, ?b[0], o);
+    if (!(sel cut.err && sel cut.err.truncated_chunk)) { ret 5; }
     ret 0;
 }
 
-# true when a release completed. test fixture
+test decode__rejects_unsupported_formats {
+    var a: allo.Allocator;
+    page.make(?a);
+    var b: [52]u8;
+
+    write_header(?b[0], FORMAT_PCM, 2, 0, 16, 8);
+    val rateless: res[buffer.Buffer, DecodeError] = decode(?a, ?b[0], 52);
+    if (!(sel rateless.err && sel rateless.err.zero_rate)) { ret 1; }
+
+    write_header(?b[0], FORMAT_PCM, 1, 44100, 8, 8);
+    val narrow: res[buffer.Buffer, DecodeError] = decode(?a, ?b[0], 52);
+    if (!(sel narrow.err && (sel narrow.err.bits && narrow.err.bits == 8))) { ret 2; }
+
+    write_header(?b[0], FORMAT_PCM, 3, 44100, 16, 6);
+    val surround: res[buffer.Buffer, DecodeError] = decode(?a, ?b[0], 50);
+    if (!(sel surround.err && (sel surround.err.channels && surround.err.channels == 3))) { ret 3; }
+
+    write_header(?b[0], 2, 1, 44100, 16, 8);
+    val adpcm: res[buffer.Buffer, DecodeError] = decode(?a, ?b[0], 52);
+    if (!(sel adpcm.err && (sel adpcm.err.format && adpcm.err.format == 2))) { ret 4; }
+    ret 0;
+}
+
+# true when a release completed
+#[testing]
 fun released(r: err[allo.Error]) bool {
     ret sel r.ok;
 }
