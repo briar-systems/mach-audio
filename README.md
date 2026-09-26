@@ -28,7 +28,7 @@ That writes this stanza to `mach.toml`:
 ```toml
 [dep.audio]
 git = "https://github.com/briar-systems/mach-audio"
-version = "^0.9.0"
+version = "^0.10.0"
 ```
 
 ## Status
