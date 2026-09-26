@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-09-26
+
+### Breaking
+- toolchain: The library, `test/consumer` and `demo/play` require Mach 6
+  (`mach = "^6"`) and std 9.0 (`^9.0`, pinned to v9.0.0), and CI runs on
+  Mach v6.0.0 (#71). A consumer on Mach 5 or std 8 stays on 0.9.x. The public
+  surface is unchanged.
+
+### Changed
+- tests: Tests are named `test <identifier>`, grouped as `subject__case`, and
+  pruned to the Mach test policy, so `mach test .` runs 25 tests in place of
+  49 (#71). The inline null-backend probe test is removed, since it waited on
+  a callback thread, and `test/consumer` runs the same probe on every CI leg.
+- readme: The dependency stanza selects `version = "^0.10.0"`, the requirement
+  line names Mach 6 and std 9, and the test section says `test/consumer`
+  carries the device lifecycle check (#71).
+
 ## [0.9.1] - 2026-09-25
 
 ### Changed

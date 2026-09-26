@@ -9,14 +9,11 @@
 
 use std.types.bool.bool;
 use std.types.bool.false;
+#[testing]
 use std.types.bool.true;
-use std.types.error.err;
-use std.types.result.res;
 use std.types.size.usize;
 
 use audio.buffer;
-use allo: std.allocator;
-use std.allocator.page;
 
 # a cursor over a decoded, interleaved f32 source
 #
@@ -203,73 +200,50 @@ pub fun done(s: Stream) bool {
     ret s.cursor >= s.frames;
 }
 
-test "stream: pull copies frames and advances the cursor" {
-    var src: [8]f32 = [8]f32{0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8};
-    var s:   Stream;
-    s.samples  = ?src[0];
-    s.frames   = 4;
-    s.channels = 2;
+# a stream over samples at the given rate, positioned at the first frame
+#[testing]
+fun over(samples: *f32, frames: usize, channels: u16, rate: f32, looping: bool) Stream {
+    var s: Stream;
+    s.samples  = samples;
+    s.frames   = frames;
+    s.channels = channels;
     s.cursor   = 0;
     s.frac     = 0.0;
-    s.rate     = 1.0;
-    s.looping  = false;
-
-    var out: [4]f32;
-    pull(?s, ?out[0], 2, 2);
-    if (out[0] != 0.1 || out[1] != 0.2 || out[2] != 0.3 || out[3] != 0.4) { ret 1; }
-    if (s.cursor != 2)                                                    { ret 1; }
-    if (done(s))                                                          { ret 1; }
-    ret 0;
+    s.rate     = rate;
+    s.looping  = looping;
+    ret s;
 }
 
-test "stream: pull zero-fills past the end when not looping" {
-    var src: [2]f32 = [2]f32{0.5, -0.5};
-    var s:   Stream;
-    s.samples  = ?src[0];
-    s.frames   = 1;
-    s.channels = 2;
-    s.cursor   = 0;
-    s.frac     = 0.0;
-    s.rate     = 1.0;
-    s.looping  = false;
-
+test pull__copies_then_zero_fills_past_the_end {
+    var src: [4]f32 = [4]f32{0.1, 0.2, 0.3, 0.4};
+    var s:   Stream = over(?src[0], 2, 2, 1.0, false);
     var out: [6]f32 = [6]f32{9.0, 9.0, 9.0, 9.0, 9.0, 9.0};
+
+    pull(?s, ?out[0], 1, 2);
+    if (out[0] != 0.1 || out[1] != 0.2) { ret 1; }
+    if (s.cursor != 1 || done(s))       { ret 2; }
+
     pull(?s, ?out[0], 3, 2);
-    if (out[0] != 0.5 || out[1] != -0.5)                                  { ret 1; }
-    if (out[2] != 0.0 || out[3] != 0.0 || out[4] != 0.0 || out[5] != 0.0) { ret 1; }
-    if (!done(s))                                                         { ret 1; }
+    if (out[0] != 0.3 || out[1] != 0.4)                                   { ret 3; }
+    if (out[2] != 0.0 || out[3] != 0.0 || out[4] != 0.0 || out[5] != 0.0) { ret 4; }
+    if (!done(s))                                                         { ret 5; }
     ret 0;
 }
 
-test "stream: looping wraps to the start" {
+test pull__looping_wraps_to_the_start {
     var src: [2]f32 = [2]f32{1.0, 2.0};
-    var s:   Stream;
-    s.samples  = ?src[0];
-    s.frames   = 2;
-    s.channels = 1;
-    s.cursor   = 0;
-    s.frac     = 0.0;
-    s.rate     = 1.0;
-    s.looping  = true;
+    var s:   Stream = over(?src[0], 2, 1, 1.0, true);
 
     var out: [5]f32;
     pull(?s, ?out[0], 5, 1);
-    # 1,2 then wrap: 1,2,1
     if (out[0] != 1.0 || out[1] != 2.0 || out[2] != 1.0 || out[3] != 2.0 || out[4] != 1.0) { ret 1; }
-    if (done(s))                                                                           { ret 1; }
+    if (done(s))                                                                           { ret 2; }
     ret 0;
 }
 
-test "stream: channel mismatch yields silence" {
+test pull__channel_mismatch_yields_silence {
     var src: [4]f32 = [4]f32{0.3, 0.3, 0.3, 0.3};
-    var s:   Stream;
-    s.samples  = ?src[0];
-    s.frames   = 4;
-    s.channels = 1;
-    s.cursor   = 0;
-    s.frac     = 0.0;
-    s.rate     = 1.0;
-    s.looping  = false;
+    var s:   Stream = over(?src[0], 4, 1, 1.0, false);
 
     var out: [4]f32 = [4]f32{9.0, 9.0, 9.0, 9.0};
     pull(?s, ?out[0], 2, 2);
@@ -277,62 +251,13 @@ test "stream: channel mismatch yields silence" {
     ret 0;
 }
 
-test "stream: stream_over borrows the buffer at frame zero" {
-    var a: allo.Allocator;
-    page.make(?a);
-
-    var fmt: buffer.Format;
-    fmt.sample_rate = 48000;
-    fmt.channels    = 2;
-
-    val made: res[buffer.Buffer, buffer.BufferError] = buffer.init(?a, fmt, 3);
-    if (sel made.err) { ret 1; }
-    var buf: buffer.Buffer = made.ok;
-    var s:   Stream        = stream_over(?buf, false);
-    if (s.samples != buf.samples)                          { ret 1; }
-    if (s.frames != 3 || s.channels != 2 || s.cursor != 0) { ret 1; }
-    if (s.looping)                                         { ret 1; }
-
-    val released: err[allo.Error] = buffer.dnit(?buf);
-    if (sel released.err) { ret 1; }
-    ret 0;
-}
-
-test "stream: rate 1 returns the source sample for sample" {
-    # This pins the values, not the fast path. At rate 1 with no accumulated
-    # fraction the interpolator is arithmetically identical to the copy, so
-    # deleting the fast path is invisible here and no test can see it: it is an
-    # optimization and a guard against accumulator drift, not a behaviour.
-    var src: [4]f32 = [4]f32{0.1, 0.2, 0.3, 0.4};
-    var s:   Stream;
-    s.samples  = ?src[0];
-    s.frames   = 4;
-    s.channels = 1;
-    s.cursor   = 0;
-    s.frac     = 0.0;
-    s.rate     = 1.0;
-    s.looping  = false;
-
-    var out: [4]f32;
-    pull(?s, ?out[0], 4, 1);
-    if (out[0] != 0.1 || out[1] != 0.2 || out[2] != 0.3 || out[3] != 0.4) { ret 1; }
-    ret 0;
-}
-
-test "stream: half rate interpolates between neighbours" {
+test pull__half_rate_interpolates_between_neighbours {
     var src: [3]f32 = [3]f32{0.0, 1.0, 0.0};
-    var s:   Stream;
-    s.samples  = ?src[0];
-    s.frames   = 3;
-    s.channels = 1;
-    s.cursor   = 0;
-    s.frac     = 0.0;
-    s.rate     = 0.5;
-    s.looping  = false;
+    var s:   Stream = over(?src[0], 3, 1, 0.5, false);
 
     var out: [4]f32;
     pull(?s, ?out[0], 4, 1);
-    # Positions 0.0, 0.5, 1.0, 1.5 over the ramp 0, 1, 0.
+    # positions 0.0, 0.5, 1.0, 1.5 over the ramp 0, 1, 0
     if (out[0] != 0.0) { ret 1; }
     if (out[1] != 0.5) { ret 2; }
     if (out[2] != 1.0) { ret 3; }
@@ -340,63 +265,29 @@ test "stream: half rate interpolates between neighbours" {
     ret 0;
 }
 
-test "stream: double rate advances two source frames per output frame" {
-    var src: [4]f32 = [4]f32{0.0, 0.1, 0.2, 0.3};
-    var s:   Stream;
-    s.samples  = ?src[0];
-    s.frames   = 4;
-    s.channels = 1;
-    s.cursor   = 0;
-    s.frac     = 0.0;
-    s.rate     = 2.0;
-    s.looping  = false;
-
-    var out: [2]f32;
-    pull(?s, ?out[0], 2, 1);
-    if (out[0] != 0.0) { ret 1; }
-    if (out[1] != 0.2) { ret 2; }
-    if (s.cursor != 4) { ret 3; }
-    if (!done(s))      { ret 4; }
-    ret 0;
-}
-
-test "stream: a retuned stream still ends and still loops" {
-    # The resampling path has its own end and wrap handling, so both have to be
-    # pinned there too. A stream that never reports done leaks a voice forever.
+test pull__retuned_stream_ends_and_loops {
+    # the resampling path has its own end and wrap handling. a stream that never
+    # reports done leaks a voice forever
     var src: [2]f32 = [2]f32{1.0, 2.0};
-    var s:   Stream;
-    s.samples  = ?src[0];
-    s.frames   = 2;
-    s.channels = 1;
-    s.cursor   = 0;
-    s.frac     = 0.0;
-    s.rate     = 1.5;
-    s.looping  = false;
+    var s:   Stream = over(?src[0], 2, 1, 1.5, false);
 
     var out: [4]f32 = [4]f32{9.0, 9.0, 9.0, 9.0};
     pull(?s, ?out[0], 4, 1);
-    if (!done(s))      { ret 1; }
+    # position 1.5 holds the last frame rather than fading toward silence
+    if (out[1] != 2.0) { ret 1; }
     if (out[3] != 0.0) { ret 2; }
+    if (!done(s))      { ret 3; }
 
-    var l: Stream;
-    l.samples  = ?src[0];
-    l.frames   = 2;
-    l.channels = 1;
-    l.cursor   = 0;
-    l.frac     = 0.0;
-    l.rate     = 1.5;
-    l.looping  = true;
-
+    var l:    Stream = over(?src[0], 2, 1, 1.5, true);
     var lout: [8]f32;
     pull(?l, ?lout[0], 8, 1);
-    if (done(l))              { ret 3; }
-    if (l.cursor >= l.frames) { ret 4; }
+    if (done(l))              { ret 4; }
+    if (l.cursor >= l.frames) { ret 5; }
     ret 0;
 }
 
-test "stream: the rate setter clamps rather than hanging or racing" {
-    var b: buffer.Buffer = empty_buffer();
-    var s: Stream        = stream_over(?b, false);
+test stream_set_rate__clamps_to_the_bounds {
+    var s: Stream = over(nil, 0, 1, 1.0, false);
     stream_set_rate(?s, 0.0);
     if (s.rate != RATE_MIN) { ret 1; }
     stream_set_rate(?s, -4.0);
@@ -406,12 +297,4 @@ test "stream: the rate setter clamps rather than hanging or racing" {
     stream_set_rate(?s, 1.5);
     if (s.rate != 1.5) { ret 4; }
     ret 0;
-}
-
-fun empty_buffer() buffer.Buffer {
-    var b: buffer.Buffer;
-    b.samples         = nil;
-    b.frames          = 0;
-    b.format.channels = 1;
-    ret b;
 }

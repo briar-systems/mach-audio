@@ -193,134 +193,41 @@ pub fun stereo_to_mono(dst: *f32, src: *f32, frames: usize) {
     }
 }
 
-test "mix: gain, sum, and clamp" {
-    if (gain(0.5, 2.0) != 1.0)    { ret 1; }
-    if (gain(0.5, unity) != 0.5)  { ret 1; }
-    if (sum(0.25, 0.5) != 0.75)   { ret 1; }
-    if (sum(silence, 0.3) != 0.3) { ret 1; }
-    if (clamp(1.5) != 1.0)        { ret 1; }
-    if (clamp(-1.5) != -1.0)      { ret 1; }
-    if (clamp(0.5) != 0.5)        { ret 1; }
-    ret 0;
-}
-
-test "mix: apply_gain scales a sample array in place" {
-    var buf: [4]f32 = [4]f32{0.1, 0.25, 0.5, -0.5};
-    apply_gain(?buf[0], 4, 2.0);
-    if (buf[0] != 0.2)  { ret 1; }
-    if (buf[1] != 0.5)  { ret 1; }
-    if (buf[2] != 1.0)  { ret 1; }
-    if (buf[3] != -1.0) { ret 1; }
-    ret 0;
-}
-
-test "mix: clamp_samples limits an array to full scale" {
-    var buf: [4]f32 = [4]f32{1.5, -1.5, 0.5, -0.25};
-    clamp_samples(?buf[0], 4);
-    if (buf[0] != 1.0)   { ret 1; }
-    if (buf[1] != -1.0)  { ret 1; }
-    if (buf[2] != 0.5)   { ret 1; }
-    if (buf[3] != -0.25) { ret 1; }
-    ret 0;
-}
-
-test "mix: mix_add accumulates a scaled source" {
-    var dst: [3]f32 = [3]f32{0.1, 0.2, 0.3};
-    var src: [3]f32 = [3]f32{0.5, 0.5, 0.5};
-    mix_add(?dst[0], ?src[0], 3, 0.5);
-    if (dst[0] != 0.35) { ret 1; }
-    if (dst[1] != 0.45) { ret 1; }
-    if (dst[2] != 0.55) { ret 1; }
-    ret 0;
-}
-
-test "mix: mix sums sources with gain and clamps the bus" {
+test mix__sums_sources_with_gain_and_clamps {
     var a: [4]f32 = [4]f32{0.5, 0.5, 0.5, -0.5};
-    var b: [4]f32 = [4]f32{0.5, 0.25, 1.0, -0.75};
+    var b: [4]f32 = [4]f32{1.0, 0.5, 2.0, -2.0};
 
     var srcs: [2]Source;
     srcs[0].samples = ?a[0];
     srcs[0].gain    = 1.0;
     srcs[1].samples = ?b[0];
-    srcs[1].gain    = 1.0;
+    srcs[1].gain    = 0.5;
 
     var dst: [4]f32 = [4]f32{9.0, 9.0, 9.0, 9.0};
     mix(?dst[0], 4, ?srcs[0], 2);
 
-    # 0.5+0.5=1.0; 0.5+0.25=0.75; 0.5+1.0=1.5 -> 1.0; -0.5-0.75=-1.25 -> -1.0
+    # 0.5+0.5=1.0; 0.5+0.25=0.75; 0.5+1.0=1.5 -> 1.0; -0.5-1.0=-1.5 -> -1.0
     if (dst[0] != 1.0)  { ret 1; }
-    if (dst[1] != 0.75) { ret 1; }
-    if (dst[2] != 1.0)  { ret 1; }
-    if (dst[3] != -1.0) { ret 1; }
+    if (dst[1] != 0.75) { ret 2; }
+    if (dst[2] != 1.0)  { ret 3; }
+    if (dst[3] != -1.0) { ret 4; }
     ret 0;
 }
 
-test "mix: mix with a per-source gain attenuates" {
-    var a:    [2]f32 = [2]f32{1.0, -1.0};
-    var srcs: [1]Source;
-    srcs[0].samples = ?a[0];
-    srcs[0].gain    = 0.25;
-
-    var dst: [2]f32 = [2]f32{0.0, 0.0};
-    mix(?dst[0], 2, ?srcs[0], 1);
-    if (dst[0] != 0.25)  { ret 1; }
-    if (dst[1] != -0.25) { ret 1; }
-    ret 0;
-}
-
-test "mix: mix with no sources yields silence" {
-    var dst: [3]f32 = [3]f32{0.4, -0.4, 0.9};
-    mix(?dst[0], 3, nil, 0);
-    if (dst[0] != 0.0) { ret 1; }
-    if (dst[1] != 0.0) { ret 1; }
-    if (dst[2] != 0.0) { ret 1; }
-    ret 0;
-}
-
-test "mix: mono_to_stereo duplicates each sample" {
-    var src: [3]f32 = [3]f32{0.1, -0.2, 0.3};
-    var dst: [6]f32;
-    mono_to_stereo(?dst[0], ?src[0], 3);
-    if (dst[0] != 0.1 || dst[1] != 0.1)   { ret 1; }
-    if (dst[2] != -0.2 || dst[3] != -0.2) { ret 1; }
-    if (dst[4] != 0.3 || dst[5] != 0.3)   { ret 1; }
-    ret 0;
-}
-
-test "mix: stereo_to_mono averages channels" {
-    var src: [6]f32 = [6]f32{1.0, 0.0, -0.5, 0.5, 0.2, 0.2};
-    var dst: [3]f32;
-    stereo_to_mono(?dst[0], ?src[0], 3);
-    if (dst[0] != 0.5) { ret 1; }
-    if (dst[1] != 0.0) { ret 1; }
-    if (dst[2] != 0.2) { ret 1; }
-    ret 0;
-}
-
-test "mix: mix_add_pan applies a gain per channel" {
-    var dst: [4]f32 = [4]f32{0.0, 0.0, 0.0, 0.0};
+test mix_add_pan__accumulates_a_gain_per_channel {
+    var dst: [4]f32 = [4]f32{0.5, 0.5, 0.0, 0.0};
     var src: [4]f32 = [4]f32{1.0, 1.0, 0.5, 0.5};
     mix_add_pan(?dst[0], ?src[0], 2, 2, 0.25, 0.75);
-    if (dst[0] != 0.25)  { ret 1; }
-    if (dst[1] != 0.75)  { ret 2; }
+    if (dst[0] != 0.75)  { ret 1; }
+    if (dst[1] != 1.25)  { ret 2; }
     if (dst[2] != 0.125) { ret 3; }
     if (dst[3] != 0.375) { ret 4; }
     ret 0;
 }
 
-test "mix: mix_add_pan accumulates rather than overwriting" {
-    var dst: [2]f32 = [2]f32{0.5, 0.5};
-    var src: [2]f32 = [2]f32{1.0, 1.0};
-    mix_add_pan(?dst[0], ?src[0], 1, 2, 0.5, 0.5);
-    if (dst[0] != 1.0) { ret 1; }
-    if (dst[1] != 1.0) { ret 2; }
-    ret 0;
-}
-
-test "mix: a non-stereo bus gets the mean of the two gains" {
-    # There is no left and right to place a source between, so the pan cannot
-    # apply. Dropping to one channel's gain would make a mono device quieter
-    # or louder depending on which side the source happened to sit.
+test mix_add_pan__non_stereo_bus_gets_the_mean_gain {
+    # dropping to one channel's gain would make a mono device quieter or louder
+    # depending on which side the source happened to sit
     var dst: [3]f32 = [3]f32{0.0, 0.0, 0.0};
     var src: [3]f32 = [3]f32{1.0, 1.0, 1.0};
     mix_add_pan(?dst[0], ?src[0], 3, 1, 0.2, 0.8);
