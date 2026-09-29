@@ -20,8 +20,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - ci: A native `aarch64-darwin` leg on `macos-15` builds and runs the consumer
   smoke and the Mach-O check, which expects each architecture's symbol
-  spellings, and CI seeds Mach v6.7.0, since v6.0.0's linker refuses the
-  aarch64-darwin link (#75). The library's own `mach = "^6"` is unchanged.
+  spellings, and CI seeds Mach v6.7.1, since v6.0.0's linker refuses the
+  aarch64-darwin link and v6.7.0's refuses the windows link
+  (briar-systems/mach#4251) (#75). The library's own `mach = "^6"` is
+  unchanged.
 - readme: The dependency stanza selects `version = "^0.10.1"`, and the
   validation table gains a darwin-aarch64 row (#75).
 
