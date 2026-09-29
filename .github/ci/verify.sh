@@ -45,16 +45,18 @@ case "$MACH_CI_LEG" in
     done
     pe_check
     ;;
-  x86_64-darwin)
+  x86_64-darwin|aarch64-darwin)
+    target=darwin
+    [ "$MACH_CI_LEG" = aarch64-darwin ] && target=darwin-aarch64
     for profile in $MACH_CI_PROFILES; do
-      smoke "$consumer/darwin/$profile/bin/audio-consumer" "$RUNNER_TEMP/audio-consumer-darwin-$profile.log"
+      smoke "$consumer/$target/$profile/bin/audio-consumer" "$RUNNER_TEMP/audio-consumer-$target-$profile.log"
     done
     for profile in $MACH_CI_PROFILES; do
       tools/check-darwin-macho.sh \
-        "$play/darwin/$profile/vendor/miniaudio/miniaudio.o" \
-        "$play/darwin/$profile/bin/play" \
-        "$consumer/darwin/$profile/bin/audio-consumer"
-      echo "darwin $profile: Mach-O imports ok"
+        "$play/$target/$profile/vendor/miniaudio/miniaudio.o" \
+        "$play/$target/$profile/bin/play" \
+        "$consumer/$target/$profile/bin/audio-consumer"
+      echo "$target $profile: Mach-O imports ok"
     done
     ;;
 esac

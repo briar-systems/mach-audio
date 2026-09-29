@@ -19,7 +19,7 @@ on:
         description: heavy work to run on this ref
         type: choice
         default: none
-        options: [none, all, windows-cross, x86_64-windows, x86_64-darwin]
+        options: [none, all, windows-cross, x86_64-windows, x86_64-darwin, aarch64-darwin]
 
 permissions:
   contents: read
@@ -39,7 +39,9 @@ jobs:
          {"name": "x86_64-windows", "runs-on": "windows-latest", "tier": "heavy",
           "target": "windows"},
          {"name": "x86_64-darwin", "runs-on": "macos-15-intel", "tier": "heavy",
-          "target": "darwin"}]
+          "target": "darwin"},
+         {"name": "aarch64-darwin", "runs-on": "macos-15", "tier": "heavy",
+          "target": "darwin-aarch64"}]
       # the play example is its own project, so every profile builds it on every
       # leg beside the consumer, and verify.sh checks both
       subprojects: >-
