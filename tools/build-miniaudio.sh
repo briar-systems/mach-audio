@@ -40,7 +40,11 @@ darwin)
     fi
     defs="-DMA_ENABLE_ONLY_SPECIFIC_BACKENDS -DMA_ENABLE_COREAUDIO -DMA_ENABLE_NULL -DMA_NO_RUNTIME_LINKING"
     cc=${CC:-cc}
-    target="-arch $isa"
+    # apple clang names aarch64 arm64
+    case $isa in
+    aarch64) target="-arch arm64" ;;
+    *) target="-arch $isa" ;;
+    esac
     # mach#2973: keep clang from emitting unsupported SUBTRACTOR relocation pairs.
     # mach#2974: emit tentative globals into BSS instead of unsupported common symbols.
     flags="-fno-jump-tables -fno-common"
