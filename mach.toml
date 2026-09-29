@@ -159,7 +159,7 @@ source = "system"
 name   = "/usr/lib/libSystem.B.dylib"
 library = "libSystem"
 symbols = [
-    "___chkstk_darwin", "__chkstk_darwin", "__assert_rtn", "__bzero",
+    "___chkstk_darwin", "__chkstk_darwin", "__assert_rtn", "__bzero", "bzero",
     "__stack_chk_fail", "__stack_chk_guard", "clock_gettime", "exp", "free",
     "gettimeofday", "mach_absolute_time", "malloc", "memcpy", "memset",
     "pthread_attr_destroy", "pthread_attr_getschedparam", "pthread_attr_init",
