@@ -159,9 +159,9 @@ source = "system"
 name   = "/usr/lib/libSystem.B.dylib"
 library = "libSystem"
 symbols = [
-    "___chkstk_darwin", "__assert_rtn", "__bzero", "__stack_chk_fail",
-    "__stack_chk_guard", "clock_gettime", "exp", "free", "gettimeofday",
-    "mach_absolute_time", "malloc", "memcpy", "memset",
+    "___chkstk_darwin", "__chkstk_darwin", "__assert_rtn", "__bzero",
+    "__stack_chk_fail", "__stack_chk_guard", "clock_gettime", "exp", "free",
+    "gettimeofday", "mach_absolute_time", "malloc", "memcpy", "memset",
     "pthread_attr_destroy", "pthread_attr_getschedparam", "pthread_attr_init",
     "pthread_attr_setinheritsched", "pthread_attr_setschedparam",
     "pthread_attr_setschedpolicy", "pthread_attr_setstacksize",
