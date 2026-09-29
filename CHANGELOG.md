@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.1] - 2026-09-29
+
+### Fixed
+- build: aarch64 darwin builds. `tools/build-miniaudio.sh` passed `-arch
+  aarch64` to Apple clang, which accepts only `arm64`, so every aarch64-darwin
+  build failed (#75). The root, `test/consumer` and `demo/play` declare a
+  `darwin-aarch64` target, and `link.libSystem` names arm64's `select`,
+  `bzero` and `__chkstk_darwin`, which miniaudio imports under their arm64
+  spellings there.
+
+### Changed
+- ci: A native `aarch64-darwin` leg on `macos-15` builds and runs the consumer
+  smoke and the Mach-O check, which expects each architecture's symbol
+  spellings, and CI seeds Mach v6.7.1, since v6.0.0's linker refuses the
+  aarch64-darwin link and v6.7.0's refuses the windows link
+  (briar-systems/mach#4251) (#75). The library's own `mach = "^6"` is
+  unchanged.
+- readme: The dependency stanza selects `version = "^0.10.1"`, and the
+  validation table gains a darwin-aarch64 row (#75).
+
 ## [0.10.0] - 2026-09-26
 
 ### Breaking

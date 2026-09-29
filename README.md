@@ -28,7 +28,7 @@ That writes this stanza to `mach.toml`:
 ```toml
 [dep.audio]
 git = "https://github.com/briar-systems/mach-audio"
-version = "^0.10.0"
+version = "^0.10.1"
 ```
 
 ## Status
@@ -193,6 +193,7 @@ hosted null-device run is never presented as a physical speaker test.
 | linux | x86_64 | ALSA / PulseAudio / JACK | native build, 25 tests, external lifecycle probe | default PipeWire output opened/started/stopped in debug and release; audible result not independently asserted |
 | windows | x86_64 | WASAPI | Linux cross-link, 25 native tests, exact PE inspection, external lifecycle probe | confirmed by users in real use, not by the repo's own device harness (2026-09-18) |
 | darwin | x86_64 | CoreAudio | native Intel build, 25 tests, exact Mach-O inspection, external lifecycle probe | confirmed by users in real use, not by the repo's own device harness (2026-09-18) |
+| darwin-aarch64 | aarch64 | CoreAudio | native Apple silicon build, 25 tests, exact Mach-O inspection, external lifecycle probe | not yet confirmed |
 
 ## Tests
 

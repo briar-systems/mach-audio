@@ -1,6 +1,6 @@
 [project]
 id      = "audio"
-version = "0.10.0"
+version = "0.10.1"
 mach    = "^6"
 src     = "src"
 out     = "out/{target.name}/{profile.name}"
@@ -20,6 +20,11 @@ abi = "win64"
 isa = "x86_64"
 os  = "darwin"
 abi = "sysv64"
+
+[target.darwin-aarch64]
+isa = "aarch64"
+os  = "darwin"
+abi = "aapcs64"
 
 [profile.debug]
 default = true
@@ -154,9 +159,9 @@ source = "system"
 name   = "/usr/lib/libSystem.B.dylib"
 library = "libSystem"
 symbols = [
-    "___chkstk_darwin", "__assert_rtn", "__bzero", "__stack_chk_fail",
-    "__stack_chk_guard", "clock_gettime", "exp", "free", "gettimeofday",
-    "mach_absolute_time", "malloc", "memcpy", "memset",
+    "___chkstk_darwin", "__chkstk_darwin", "__assert_rtn", "__bzero", "bzero",
+    "__stack_chk_fail", "__stack_chk_guard", "clock_gettime", "exp", "free",
+    "gettimeofday", "mach_absolute_time", "malloc", "memcpy", "memset",
     "pthread_attr_destroy", "pthread_attr_getschedparam", "pthread_attr_init",
     "pthread_attr_setinheritsched", "pthread_attr_setschedparam",
     "pthread_attr_setschedpolicy", "pthread_attr_setstacksize",
@@ -164,8 +169,8 @@ symbols = [
     "pthread_cond_signal", "pthread_cond_wait", "pthread_create",
     "pthread_join", "pthread_mutex_destroy", "pthread_mutex_init",
     "pthread_mutex_lock", "pthread_mutex_unlock", "realloc",
-    "sched_get_priority_max", "sched_get_priority_min", "select$1050", "sin",
-    "strcmp", "strlen", "usleep", "vsnprintf",
+    "sched_get_priority_max", "sched_get_priority_min", "select", "select$1050",
+    "sin", "strcmp", "strlen", "usleep", "vsnprintf",
 ]
 os     = ["darwin"]
 isa    = "*"
