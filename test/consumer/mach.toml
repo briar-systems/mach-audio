@@ -21,6 +21,11 @@ isa = "x86_64"
 os = "darwin"
 abi = "sysv64"
 
+[target.darwin-aarch64]
+isa = "aarch64"
+os = "darwin"
+abi = "aapcs64"
+
 [profile.debug]
 default = true
 opt = 0
@@ -40,7 +45,7 @@ float_reassoc = false
 kind = "bin"
 entry = "main.mach"
 out = "bin/audio-consumer"
-targets = ["linux-x86_64", "darwin"]
+targets = ["linux-x86_64", "darwin", "darwin-aarch64"]
 link = []
 need = []
 

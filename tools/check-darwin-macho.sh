@@ -62,12 +62,22 @@ _pthread_mutex_unlock
 _realloc
 _sched_get_priority_max
 _sched_get_priority_min
-_select$1050
 _sin
 _strcmp
 _strlen
 _vsnprintf
 EOF
+
+# x86_64 binds select to its 10.5 variant, arm64 has only the one
+arch=$(lipo -archs "$object")
+case $arch in
+x86_64) echo '_select$1050' >>"$tmp/expected-object-imports" ;;
+arm64) echo _select >>"$tmp/expected-object-imports" ;;
+*)
+    echo "check-darwin-macho: unexpected architecture '$arch' in $object" >&2
+    exit 1
+    ;;
+esac
 
 sort -u "$tmp/expected-object-imports" >"$tmp/expected-object-imports-sorted"
 nm -u "$object" | sed '/^$/d' | sort -u >"$tmp/actual-object-imports"
