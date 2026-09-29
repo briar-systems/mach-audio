@@ -31,9 +31,7 @@ _AudioUnitRender
 _AudioUnitSetProperty
 _CFRelease
 _CFStringGetCString
-____chkstk_darwin
 ___assert_rtn
-___bzero
 ___stack_chk_fail
 ___stack_chk_guard
 _exp
@@ -62,12 +60,23 @@ _pthread_mutex_unlock
 _realloc
 _sched_get_priority_max
 _sched_get_priority_min
-_select$1050
 _sin
 _strcmp
 _strlen
 _vsnprintf
 EOF
+
+# x86_64 binds select to its 10.5 variant, and names bzero and the stack probe
+# by their x86_64 entry points
+arch=$(lipo -archs "$object")
+case $arch in
+x86_64) printf '%s\n' '_select$1050' ___bzero ____chkstk_darwin >>"$tmp/expected-object-imports" ;;
+arm64) printf '%s\n' _select _bzero ___chkstk_darwin >>"$tmp/expected-object-imports" ;;
+*)
+    echo "check-darwin-macho: unexpected architecture '$arch' in $object" >&2
+    exit 1
+    ;;
+esac
 
 sort -u "$tmp/expected-object-imports" >"$tmp/expected-object-imports-sorted"
 nm -u "$object" | sed '/^$/d' | sort -u >"$tmp/actual-object-imports"
