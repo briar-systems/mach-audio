@@ -33,6 +33,8 @@ linux)
         target="-target $isa-linux-gnu"
     fi
     pic=-fPIC
+    # outline atomics call libgcc helpers the link never pulls in
+    case $isa in aarch64) flags="-mno-outline-atomics" ;; esac
     ;;
 windows)
     defs="-DMA_ENABLE_ONLY_SPECIFIC_BACKENDS -DMA_ENABLE_WASAPI -DMA_ENABLE_NULL"

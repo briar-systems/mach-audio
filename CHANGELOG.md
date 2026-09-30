@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- target: `linux-arm64` (aarch64, aapcs64) in the root, `test/consumer` and
+  `demo/play`, with every hosted artifact listing it. A native `aarch64-linux`
+  leg on `ubuntu-24.04-arm` builds and tests it and runs the consumer smoke
+  (#81).
+
 ## [0.10.1] - 2026-09-29
 
 ### Fixed
