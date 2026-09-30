@@ -7,11 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-09-30
+
 ### Added
 - target: `linux-arm64` (aarch64, aapcs64) in the root, `test/consumer` and
   `demo/play`, with every hosted artifact listing it. A native `aarch64-linux`
   leg on `ubuntu-24.04-arm` builds and tests it and runs the consumer smoke
-  (#81).
+  (#81). Linux aarch64 C builds pass `-mno-outline-atomics`, since the
+  link never pulls in the libgcc helpers outline atomics call.
+
+### Fixed
+- build: `tools/build-miniaudio.sh` built natively whenever the target os
+  matched the host, whatever the isa, so an arm64 host building an x86_64
+  linux target compiled aarch64 objects into it. It now builds natively only
+  when the isa matches too (#80).
 
 ## [0.10.1] - 2026-09-29
 
