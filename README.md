@@ -46,8 +46,8 @@ buffer to it. The effect graph described below remains the roadmap.
 The complete device lifecycle is verified against real Linux hardware: the
 `play` example decodes a WAV, mixes it, opens the default PipeWire-backed
 device, starts its callback thread, drains the source, and closes cleanly. The
-same lifecycle is exercised without hardware on every native CI host through
-miniaudio's explicit null backend. Physical Windows and macOS speaker checks
+same lifecycle is exercised without hardware on each native host by the
+`test/consumer` probe through miniaudio's explicit null backend. Physical Windows and macOS speaker checks
 remain outstanding and are not claimed; see [Targets](#targets) and the
 [device validation checklist](doc/device-validation.md).
 
@@ -186,7 +186,9 @@ The selected backends are:
 ## Targets
 
 The table separates implementation from validation so a cross-build or a
-hosted null-device run is never presented as a physical speaker test.
+hosted null-device run is never presented as a physical speaker test. CI builds
+and runs the unit tests natively on every target before a release. The lifecycle
+probe and the PE and Mach-O inspections (`tools/check-*.sh`) run locally.
 
 | Target | ISA | Device backend | Automated validation | Physical hardware |
 |---|---|---|---|---|
