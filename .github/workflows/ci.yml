@@ -27,7 +27,8 @@ env:
   PROFILE: ${{ inputs.profile || 'debug' }}
 
 jobs:
-  # every runner builds every artifact for every target and tests the ones it can run
+  # the vendored miniaudio object builds only with the runner's own toolchain and sdk,
+  # so every runner builds and tests its host target
   test:
     name: test (${{ matrix.runner }})
     runs-on: ${{ matrix.runner }}
@@ -51,10 +52,16 @@ jobs:
             curl -fsSL "$url/install.sh" | sh
           fi
           echo "$MACH_INSTALL_DIR" >> "$GITHUB_PATH"
+      # windows compiles the vendored miniaudio with zig cc and links zig's mingw runtime
+      - if: runner.os == 'Windows'
+        uses: mlugg/setup-zig@v2
+        with:
+          version: 0.16.0
+          use-cache: false
       - run: mach dep pull .
       - if: strategy.job-index == 0
         run: mach fmt --check .
-      - run: mach test . --all -p "$PROFILE"
+      - run: mach test . -p "$PROFILE"
 
   gate:
     if: always()
