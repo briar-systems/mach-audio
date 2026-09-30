@@ -15,10 +15,17 @@ MINGW*|MSYS*|CYGWIN*) host=windows ;;
 *) host=other ;;
 esac
 
+# mach isa names for the host machine
+case $(uname -m) in
+arm64|aarch64) host_isa=aarch64 ;;
+x86_64|amd64) host_isa=x86_64 ;;
+*) host_isa=$(uname -m) ;;
+esac
+
 case $os in
 linux)
     defs="-DMA_ENABLE_ONLY_SPECIFIC_BACKENDS -DMA_ENABLE_ALSA -DMA_ENABLE_PULSEAUDIO -DMA_ENABLE_JACK -DMA_ENABLE_NULL"
-    if [ "$host" = linux ]; then
+    if [ "$host" = linux ] && [ "$host_isa" = "$isa" ]; then
         cc=${CC:-cc}
         target=
     else
@@ -26,6 +33,8 @@ linux)
         target="-target $isa-linux-gnu"
     fi
     pic=-fPIC
+    # outline atomics call libgcc helpers the link never pulls in
+    case $isa in aarch64) flags="-mno-outline-atomics" ;; esac
     ;;
 windows)
     defs="-DMA_ENABLE_ONLY_SPECIFIC_BACKENDS -DMA_ENABLE_WASAPI -DMA_ENABLE_NULL"

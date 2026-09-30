@@ -25,9 +25,11 @@ pe_check() {
 }
 
 case "$MACH_CI_LEG" in
-  x86_64-linux)
+  x86_64-linux|aarch64-linux)
+    target=linux-x86_64
+    [ "$MACH_CI_LEG" = aarch64-linux ] && target=linux-arm64
     for profile in $MACH_CI_PROFILES; do
-      exe="$consumer/linux-x86_64/$profile/bin/audio-consumer"
+      exe="$consumer/$target/$profile/bin/audio-consumer"
       smoke "$exe" "$RUNNER_TEMP/audio-consumer-$profile.log"
       if ldd "$exe" | grep -qiE 'miniaudio|mach-audio'; then
         echo "::error::$exe retains a dynamic mach-audio dependency"
