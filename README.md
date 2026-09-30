@@ -191,6 +191,7 @@ hosted null-device run is never presented as a physical speaker test.
 | Target | ISA | Device backend | Automated validation | Physical hardware |
 |---|---|---|---|---|
 | linux | x86_64 | ALSA / PulseAudio / JACK | native build, 25 tests, external lifecycle probe | default PipeWire output opened/started/stopped in debug and release; audible result not independently asserted |
+| linux-arm64 | aarch64 | ALSA / PulseAudio / JACK | native arm64 build, tests, consumer smoke | not yet confirmed |
 | windows | x86_64 | WASAPI | Linux cross-link, 25 native tests, exact PE inspection, external lifecycle probe | confirmed by users in real use, not by the repo's own device harness (2026-09-18) |
 | darwin | x86_64 | CoreAudio | native Intel build, 25 tests, exact Mach-O inspection, external lifecycle probe | confirmed by users in real use, not by the repo's own device harness (2026-09-18) |
 | darwin-aarch64 | aarch64 | CoreAudio | native Apple silicon build, 25 tests, exact Mach-O inspection, external lifecycle probe | not yet confirmed |
