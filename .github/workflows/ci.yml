@@ -1,60 +1,64 @@
 name: CI
 
-# the family's tiered pipeline (briar-systems/.github mach-lib.yml). a pull
-# request into dev runs the linux leg, a pull request into main runs every leg.
-# test/consumer and the demo/play example link the library the way an external
-# project does, and the per-leg checks on them live in .github/ci. cd.yml calls
-# this with heavy all on a tag. nothing runs on push.
-
 on:
   pull_request:
-  workflow_call:
-    inputs:
-      heavy:
-        type: string
-        default: none
   workflow_dispatch:
     inputs:
-      heavy:
-        description: heavy work to run on this ref
-        type: choice
-        default: none
-        options: [none, all, windows-cross, x86_64-windows, x86_64-darwin, aarch64-darwin]
+      runners:
+        description: runners to test on, as a JSON array, e.g. ["macos-15", "windows-latest"]
+        type: string
+  workflow_call:
+    inputs:
+      runners:
+        type: string
+      profile:
+        type: string
+        default: debug
 
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  MACH_VERSION: 6.8.0
+  PROFILE: ${{ inputs.profile || 'debug' }}
+
 jobs:
-  lib:
-    uses: briar-systems/.github/.github/workflows/mach-lib.yml@main
-    with:
-      heavy: ${{ inputs.heavy }}
-      mach-version: v6.7.1
-      # each target needs its own toolchain, so the legs below cover them
-      all-targets: false
-      legs: >-
-        [{"name": "x86_64-linux", "runs-on": "ubuntu-latest", "target": "linux-x86_64"},
-         {"name": "aarch64-linux", "runs-on": "ubuntu-24.04-arm", "target": "linux-arm64"},
-         {"name": "windows-cross", "runs-on": "ubuntu-latest", "tier": "heavy",
-          "target": "windows", "test": false, "apt": ["llvm", "xz-utils"]},
-         {"name": "x86_64-windows", "runs-on": "windows-latest", "tier": "heavy",
-          "target": "windows"},
-         {"name": "x86_64-darwin", "runs-on": "macos-15-intel", "tier": "heavy",
-          "target": "darwin"},
-         {"name": "aarch64-darwin", "runs-on": "macos-15", "tier": "heavy",
-          "target": "darwin-aarch64"}]
-      # the play example is its own project, so every profile builds it on every
-      # leg beside the consumer, and verify.sh checks both
-      subprojects: >-
-        [{"path": "test/consumer", "build": true, "test": false},
-         {"path": "demo/play", "build": true, "test": false}]
+  # every runner builds every artifact for every target and tests the ones it can run
+  test:
+    name: test (${{ matrix.runner }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: ${{ fromJSON(inputs.runners || '["ubuntu-latest"]') }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v6
+      - name: install mach
+        run: |
+          export MACH_INSTALL_DIR="$RUNNER_TEMP/mach"
+          url="https://raw.githubusercontent.com/briar-systems/mach/v$MACH_VERSION/dist"
+          if [ "$RUNNER_OS" = Windows ]; then
+            pwsh -NoProfile -Command "irm $url/install.ps1 | iex"
+          else
+            curl -fsSL "$url/install.sh" | sh
+          fi
+          echo "$MACH_INSTALL_DIR" >> "$GITHUB_PATH"
+      - run: mach dep pull .
+      - if: strategy.job-index == 0
+        run: mach fmt --check .
+      - run: mach test . --all -p "$PROFILE"
 
   gate:
     if: always()
-    needs: [lib]
+    needs: [test]
     runs-on: ubuntu-latest
-    timeout-minutes: 5
     steps:
-      - uses: briar-systems/.github/.github/actions/gate@main
-        with:
-          needs: ${{ toJSON(needs) }}
+      - run: exit ${{ (contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')) && 1 || 0 }}
