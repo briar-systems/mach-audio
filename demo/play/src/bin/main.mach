@@ -17,7 +17,7 @@ use std.types.result.res;
 use std.types.size.usize;
 use std.types.string.str;
 
-use audio;
+use audio.lib.audio;
 use allo: std.allocator;
 use std.allocator.page;
 use std.collections.vector;
