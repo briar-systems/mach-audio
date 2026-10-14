@@ -1,6 +1,6 @@
 # external consumer proving the exported native link and step cascade.
 
-use audio;
+use audio.lib.audio;
 use std.print;
 use std.runtime;
 

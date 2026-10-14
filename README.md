@@ -6,7 +6,7 @@ decoding — written in pure Mach. Project id is `audio`, so consumers reach
 everything as `audio.*`.
 
 ```mach
-use audio;
+use audio.lib.audio;
 
 # the pure-mach mixing layer works in normalized f32 samples.
 fun master(a: f32, b: f32, trim: f32) f32 {
@@ -96,7 +96,7 @@ The device feeds a consumer-supplied render callback on a separate,
 high-priority OS thread. That callback fills interleaved f32 frames and returns:
 
 ```mach
-use audio;
+use audio.lib.audio;
 
 # runs on the audio thread; pulls the next frames from a borrowed Stream.
 fun render(out: *f32, frames: u32, channels: u32, user: ptr) {
