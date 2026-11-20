@@ -1,59 +1,58 @@
 [project]
 id      = "audio"
 version = "0.11.0"
-mach    = "^6"
+mach    = "^7"
 src     = "src"
-out     = "out/{target.name}/{profile.name}"
+work    = "out/{target.name}/{profile.name}"
 
 [target.linux-x86_64]
-isa = "x86_64"
-os  = "linux"
-abi = "sysv64"
+arch = "x86_64"
+sys  = "linux"
+env  = "gnu"
+abi  = "sysv64"
 
 [target.linux-arm64]
-isa = "aarch64"
-os  = "linux"
-abi = "aapcs64"
+arch = "aarch64"
+sys  = "linux"
+env  = "gnu"
+abi  = "aapcs64"
 
 [target.windows]
-isa = "x86_64"
-os  = "windows"
-abi = "win64"
+arch = "x86_64"
+sys  = "windows"
+abi  = "win64"
 
 [target.darwin]
-isa = "x86_64"
-os  = "darwin"
-abi = "sysv64"
+arch = "x86_64"
+sys  = "darwin"
+abi  = "sysv64"
 
 [target.darwin-aarch64]
-isa = "aarch64"
-os  = "darwin"
-abi = "aapcs64"
+arch = "aarch64"
+sys  = "darwin"
+abi  = "darwinpcs"
 
 [profile.debug]
 default = true
-opt   = 0
+optimize = false
 debug = true
 simd = "scalarize"
-vectorize = false
-float_reassoc = false
 
 [profile.release]
-opt   = 2
+optimize = true
 debug = false
 simd = "scalarize"
-vectorize = false
-float_reassoc = false
 
 [artifact.audio]
 kind    = "static"
 entry   = "lib/audio.mach"
-out     = "lib/audio"
+out     = "{project.work}/lib/libaudio{artifact.suffix}"
 default = true
+export  = true
 targets = ["*"]
 link    = [
     "miniaudio-local", "mingw32", "compiler-rt",
-    "pthread", "m", "dl", "rt",
+    "c", "pthread", "m", "dl", "rt",
     "kernel32", "ucrt-heap", "ucrt-string", "ucrt-stdio",
     "libSystem", "CoreFoundation", "CoreAudio", "AudioToolbox",
 ]
@@ -61,64 +60,73 @@ need    = []
 
 [link.miniaudio-local]
 source = "local"
-path   = "{project.out}/vendor/miniaudio/miniaudio.o"
-os     = ["linux", "windows", "darwin"]
-isa    = "*"
-abi    = "*"
+path   = "{project.work}/vendor/miniaudio/miniaudio.o"
+sys    = ["linux", "windows", "darwin"]
+arch   = ["*"]
+abi    = ["*"]
 export = true
 
 [link.mingw32]
 source = "local"
-path   = "{project.out}/vendor/miniaudio/mingw/libmingw32.lib"
-os     = ["windows"]
-isa    = "*"
-abi    = "*"
+path   = "{project.work}/vendor/miniaudio/mingw/libmingw32.lib"
+sys    = ["windows"]
+arch   = ["*"]
+abi    = ["*"]
 export = true
 
 [link.compiler-rt]
 source = "local"
-path   = "{project.out}/vendor/miniaudio/mingw/compiler_rt.lib"
-os     = ["windows"]
-isa    = "*"
-abi    = "*"
+path   = "{project.work}/vendor/miniaudio/mingw/compiler_rt.lib"
+sys    = ["windows"]
+arch   = ["*"]
+abi    = ["*"]
+export = true
+
+# miniaudio's C object calls the C library directly, so it is named rather than
+# reached through another library's own dependencies
+[link.c]
+source = "system"
+name   = "c"
+sys    = ["linux"]
+arch   = ["*"]
+abi    = ["*"]
 export = true
 
 [link.pthread]
 source = "system"
 name   = "pthread"
-os     = ["linux"]
-isa    = "*"
-abi    = "*"
+sys    = ["linux"]
+arch   = ["*"]
+abi    = ["*"]
 export = true
 
 [link.m]
 source = "system"
 name   = "m"
-os     = ["linux"]
-isa    = "*"
-abi    = "*"
+sys    = ["linux"]
+arch   = ["*"]
+abi    = ["*"]
 export = true
 
 [link.dl]
 source = "system"
 name   = "dl"
-os     = ["linux"]
-isa    = "*"
-abi    = "*"
+sys    = ["linux"]
+arch   = ["*"]
+abi    = ["*"]
 export = true
 
 [link.rt]
 source = "system"
 name   = "rt"
-os     = ["linux"]
-isa    = "*"
-abi    = "*"
+sys    = ["linux"]
+arch   = ["*"]
+abi    = ["*"]
 export = true
 
 [link.kernel32]
 source = "system"
 name   = "kernel32.dll"
-library = "kernel32.dll"
 symbols = [
     "CloseHandle", "CreateEventA", "CreateSemaphoreA", "CreateThread",
     "FreeLibrary", "GetLastError", "GetProcAddress", "LoadLibraryA",
@@ -126,42 +134,41 @@ symbols = [
     "ReleaseSemaphore", "ResetEvent", "SetEvent", "SetThreadPriority",
     "Sleep", "WaitForSingleObject", "WideCharToMultiByte",
 ]
-os     = ["windows"]
-isa    = "*"
-abi    = "*"
+sys    = ["windows"]
+arch   = ["*"]
+abi    = ["*"]
 export = true
 
 [link.ucrt-heap]
 source = "system"
 name   = "api-ms-win-crt-heap-l1-1-0.dll"
 symbols = ["malloc", "free", "realloc"]
-os     = ["windows"]
-isa    = "*"
-abi    = "*"
+sys    = ["windows"]
+arch   = ["*"]
+abi    = ["*"]
 export = true
 
 [link.ucrt-string]
 source = "system"
 name   = "api-ms-win-crt-string-l1-1-0.dll"
 symbols = ["wcslen"]
-os     = ["windows"]
-isa    = "*"
-abi    = "*"
+sys    = ["windows"]
+arch   = ["*"]
+abi    = ["*"]
 export = true
 
 [link.ucrt-stdio]
 source = "system"
 name   = "api-ms-win-crt-stdio-l1-1-0.dll"
 symbols = ["__stdio_common_vsprintf"]
-os     = ["windows"]
-isa    = "*"
-abi    = "*"
+sys    = ["windows"]
+arch   = ["*"]
+abi    = ["*"]
 export = true
 
 [link.libSystem]
 source = "system"
 name   = "/usr/lib/libSystem.B.dylib"
-library = "libSystem"
 symbols = [
     "___chkstk_darwin", "__chkstk_darwin", "__assert_rtn", "__bzero", "bzero",
     "__stack_chk_fail", "__stack_chk_guard", "clock_gettime", "exp", "free",
@@ -176,18 +183,18 @@ symbols = [
     "sched_get_priority_max", "sched_get_priority_min", "select", "select$1050",
     "sin", "strcmp", "strlen", "usleep", "vsnprintf",
 ]
-os     = ["darwin"]
-isa    = "*"
-abi    = "*"
+sys    = ["darwin"]
+arch   = ["*"]
+abi    = ["*"]
 export = true
 
 [link.CoreFoundation]
 source = "framework"
 name   = "CoreFoundation"
 symbols = ["CFRelease", "CFStringGetCString"]
-os     = ["darwin"]
-isa    = "*"
-abi    = "*"
+sys    = ["darwin"]
+arch   = ["*"]
+abi    = ["*"]
 export = true
 
 [link.CoreAudio]
@@ -198,9 +205,9 @@ symbols = [
     "AudioObjectGetPropertyDataSize", "AudioObjectRemovePropertyListener",
     "AudioObjectSetPropertyData",
 ]
-os     = ["darwin"]
-isa    = "*"
-abi    = "*"
+sys    = ["darwin"]
+arch   = ["*"]
+abi    = ["*"]
 export = true
 
 [link.AudioToolbox]
@@ -213,30 +220,30 @@ symbols = [
     "AudioUnitGetPropertyInfo", "AudioUnitInitialize", "AudioUnitRender",
     "AudioUnitSetProperty",
 ]
-os     = ["darwin"]
-isa    = "*"
-abi    = "*"
+sys    = ["darwin"]
+arch   = ["*"]
+abi    = ["*"]
 export = true
 
 [step.build-miniaudio]
-argv = ["sh", "tools/build-miniaudio.sh", "{project.out}/vendor/miniaudio/miniaudio.o"]
+argv = ["sh", "tools/build-miniaudio.sh", "{project.work}/vendor/miniaudio/miniaudio.o"]
 in   = ["tools/build-miniaudio.sh", "vendor/mad.c", "vendor/miniaudio.h"]
-out  = ["{project.out}/vendor/miniaudio/miniaudio.o"]
+out  = ["{project.work}/vendor/miniaudio/miniaudio.o"]
 need = []
 
 [step.mingw-runtime]
 argv = [
     "sh", "tools/materialize-mingw-runtime.sh",
-    "{project.out}/vendor/miniaudio/mingw/libmingw32.lib",
-    "{project.out}/vendor/miniaudio/mingw/compiler_rt.lib",
+    "{project.work}/vendor/miniaudio/mingw/libmingw32.lib",
+    "{project.work}/vendor/miniaudio/mingw/compiler_rt.lib",
 ]
 in   = ["tools/materialize-mingw-runtime.sh"]
 out  = [
-    "{project.out}/vendor/miniaudio/mingw/libmingw32.lib",
-    "{project.out}/vendor/miniaudio/mingw/compiler_rt.lib",
+    "{project.work}/vendor/miniaudio/mingw/libmingw32.lib",
+    "{project.work}/vendor/miniaudio/mingw/compiler_rt.lib",
 ]
 need = []
 
 [dep.std]
-git     = "https://github.com/briar-systems/mach-std"
-version = "^9.0"
+git = "https://github.com/briar-systems/mach-std"
+ref = "branch/dev"

@@ -4,8 +4,8 @@ set -eu
 cd "$(dirname "$0")/.."
 
 out=${1:?usage: tools/build-miniaudio.sh <output>}
-isa=${MACH_TARGET_ISA:-x86_64}
-os=${MACH_TARGET_OS:-linux}
+arch=${MACH_TARGET_ARCH:?build-miniaudio: run as a mach step, which sets MACH_TARGET_ARCH}
+sys=${MACH_TARGET_SYS:?build-miniaudio: run as a mach step, which sets MACH_TARGET_SYS}
 flags=
 
 case $(uname -s) in
@@ -15,31 +15,31 @@ MINGW*|MSYS*|CYGWIN*) host=windows ;;
 *) host=other ;;
 esac
 
-# mach isa names for the host machine
+# mach arch names for the host machine
 case $(uname -m) in
-arm64|aarch64) host_isa=aarch64 ;;
-x86_64|amd64) host_isa=x86_64 ;;
-*) host_isa=$(uname -m) ;;
+arm64|aarch64) host_arch=aarch64 ;;
+x86_64|amd64) host_arch=x86_64 ;;
+*) host_arch=$(uname -m) ;;
 esac
 
-case $os in
+case $sys in
 linux)
     defs="-DMA_ENABLE_ONLY_SPECIFIC_BACKENDS -DMA_ENABLE_ALSA -DMA_ENABLE_PULSEAUDIO -DMA_ENABLE_JACK -DMA_ENABLE_NULL"
-    if [ "$host" = linux ] && [ "$host_isa" = "$isa" ]; then
+    if [ "$host" = linux ] && [ "$host_arch" = "$arch" ]; then
         cc=${CC:-cc}
         target=
     else
         cc=${CC:-zig cc}
-        target="-target $isa-linux-gnu"
+        target="-target $arch-linux-gnu"
     fi
     pic=-fPIC
     # outline atomics call libgcc helpers the link never pulls in
-    case $isa in aarch64) flags="-mno-outline-atomics" ;; esac
+    case $arch in aarch64) flags="-mno-outline-atomics" ;; esac
     ;;
 windows)
     defs="-DMA_ENABLE_ONLY_SPECIFIC_BACKENDS -DMA_ENABLE_WASAPI -DMA_ENABLE_NULL"
     cc=${CC:-zig cc}
-    target="-target $isa-windows-gnu"
+    target="-target $arch-windows-gnu"
     pic=
     ;;
 darwin)
@@ -50,9 +50,9 @@ darwin)
     defs="-DMA_ENABLE_ONLY_SPECIFIC_BACKENDS -DMA_ENABLE_COREAUDIO -DMA_ENABLE_NULL -DMA_NO_RUNTIME_LINKING"
     cc=${CC:-cc}
     # apple clang names aarch64 arm64
-    case $isa in
+    case $arch in
     aarch64) target="-arch arm64" ;;
-    *) target="-arch $isa" ;;
+    *) target="-arch $arch" ;;
     esac
     # mach#2973: keep clang from emitting unsupported SUBTRACTOR relocation pairs.
     # mach#2974: emit tentative globals into BSS instead of unsupported common symbols.
@@ -60,7 +60,7 @@ darwin)
     pic=
     ;;
 *)
-    echo "build-miniaudio: unsupported target os '$os'" >&2
+    echo "build-miniaudio: unsupported target sys '$sys'" >&2
     exit 1
     ;;
 esac

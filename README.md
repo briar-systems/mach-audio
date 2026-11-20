@@ -154,7 +154,8 @@ run`) compiles the vendored translation unit and links it in one pass — there 
 no separate shim build and no `-L` flag. A consumer that pulls mach-audio
 inherits the step and the platform libs automatically and builds the vendored
 object the same way; `mach` cannot compile the C for them. The pure-Mach modules
-never call into the shim. mach-audio requires Mach 6 and std 9.
+never call into the shim. mach-audio requires Mach 7 and follows std's `dev`
+branch until std's Mach 7 release.
 
 [`tools/build-miniaudio.sh`](tools/build-miniaudio.sh) selects only the intended
 backend family plus the null backend used by the lifecycle probe. Linux builds
@@ -190,7 +191,7 @@ hosted null-device run is never presented as a physical speaker test. CI builds
 and runs the unit tests natively on every target before a release. The lifecycle
 probe and the PE and Mach-O inspections (`tools/check-*.sh`) run locally.
 
-| Target | ISA | Device backend | Automated validation | Physical hardware |
+| Target | Arch | Device backend | Automated validation | Physical hardware |
 |---|---|---|---|---|
 | linux | x86_64 | ALSA / PulseAudio / JACK | native build, 25 tests, external lifecycle probe | default PipeWire output opened/started/stopped in debug and release; audible result not independently asserted |
 | linux-arm64 | aarch64 | ALSA / PulseAudio / JACK | native arm64 build, tests, consumer smoke | not yet confirmed |
@@ -216,7 +217,8 @@ current evidence ledger live in
 
 The external fixture is its own root: `mach dep pull test/consumer` realizes a
 flat `dep/` holding a copy of this project and the std it selects, rather than
-sharing the repository's `dep/std` gitlink. Like the root, it declares std by
-range and pins it with its own committed `test/consumer/dep/std` gitlink, so a
-std bump touches both gitlinks and the `ref` tag `demo/play` pins. This makes it exercise the exported native
+sharing the repository's `dep/std` gitlink. Like the root, it declares std on
+`ref = "branch/dev"` and pins it with its own committed `test/consumer/dep/std`
+gitlink, so a std bump touches both gitlinks, and `demo/play` follows the same
+ref. This makes it exercise the exported native
 build and link cascade from an independent consumer graph.
